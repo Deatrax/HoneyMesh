@@ -1,0 +1,120 @@
+# HoneyMesh — local/dev/demo topology
+# Run:   docker compose up --build
+# Stop:  docker compose down          (add -v to also wipe the postgres volume)
+
+services:
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: honeymesh-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: honeymesh
+      POSTGRES_PASSWORD: honeymesh_dev_pw
+      POSTGRES_DB: honeymesh
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./infra/postgres/init-schemas.sql:/docker-entrypoint-initdb.d/init-schemas.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U honeymesh"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: honeymesh-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: honeymesh-rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: honeymesh
+      RABBITMQ_DEFAULT_PASS: honeymesh_dev_pw
+    ports:
+      - "5672:5672"   # AMQP
+      - "15672:15672" # management UI -> http://localhost:15672
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  decoy-service:
+    build: ./decoy-service
+    container_name: honeymesh-decoy-service
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/honeymesh?currentSchema=decoy
+      SPRING_DATASOURCE_USERNAME: honeymesh
+      SPRING_DATASOURCE_PASSWORD: honeymesh_dev_pw
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_USERNAME: honeymesh
+      SPRING_RABBITMQ_PASSWORD: honeymesh_dev_pw
+    ports:
+      - "8081:8081"
+
+  threat-engine-service:
+    build: ./threat-engine-service
+    container_name: honeymesh-threat-engine-service
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/honeymesh?currentSchema=threat_engine
+      SPRING_DATASOURCE_USERNAME: honeymesh
+      SPRING_DATASOURCE_PASSWORD: honeymesh_dev_pw
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_USERNAME: honeymesh
+      SPRING_RABBITMQ_PASSWORD: honeymesh_dev_pw
+    ports:
+      - "8082:8082"
+
+  incident-service:
+    build: ./incident-service
+    container_name: honeymesh-incident-service
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/honeymesh?currentSchema=incident
+      SPRING_DATASOURCE_USERNAME: honeymesh
+      SPRING_DATASOURCE_PASSWORD: honeymesh_dev_pw
+      SPRING_DATA_REDIS_HOST: redis
+    ports:
+      - "8083:8083"
+
+  gateway:
+    build: ./gateway
+    container_name: honeymesh-gateway
+    depends_on:
+      - decoy-service
+      - threat-engine-service
+      - incident-service
+    ports:
+      - "8080:8080"
+
+volumes:
+  pgdata:

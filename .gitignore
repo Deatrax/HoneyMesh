@@ -1,0 +1,10 @@
+target/
+*.class
+.idea/
+*.iml
+out/
+.vscode/
+.DS_Store
+.env
+*.log
+gitignored/

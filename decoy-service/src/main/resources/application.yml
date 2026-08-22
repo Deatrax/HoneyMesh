@@ -1,0 +1,29 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: decoy-service
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/honeymesh?currentSchema=decoy}
+    username: ${SPRING_DATASOURCE_USERNAME:honeymesh}
+    password: ${SPRING_DATASOURCE_PASSWORD:honeymesh_dev_pw}
+  jpa:
+    hibernate:
+      ddl-auto: update   # fine for now; see README "trade-offs" before final submission
+    show-sql: false
+    open-in-view: false
+  rabbitmq:
+    host: ${SPRING_RABBITMQ_HOST:localhost}
+    port: 5672
+    username: ${SPRING_RABBITMQ_USERNAME:honeymesh}
+    password: ${SPRING_RABBITMQ_PASSWORD:honeymesh_dev_pw}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
