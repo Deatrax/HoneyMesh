@@ -45,6 +45,9 @@ class TelemetryListenerPhase3Test {
     @Mock
     private ThreatAssessmentPublisher threatAssessmentPublisher;
 
+    @Mock
+    private com.honeymesh.threatengine.service.ThreatAssessmentHistoryService historyService;
+
     private TelemetryListener telemetryListener;
 
     @BeforeEach
@@ -55,7 +58,8 @@ class TelemetryListenerPhase3Test {
                 correlationService,
                 threatScoringService,
                 blocklistService,
-                threatAssessmentPublisher
+                threatAssessmentPublisher,
+                historyService
         );
     }
 

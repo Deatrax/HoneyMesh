@@ -63,10 +63,10 @@ public class BlocklistService {
      */
     public long getRemainingTtlSeconds(String sourceIp) {
         if (sourceIp == null || sourceIp.isBlank()) {
-            return -2;
+            return 0;
         }
         String key = BLOCK_KEY_PREFIX + sourceIp.trim();
         Long ttl = redisTemplate.getExpire(key, TimeUnit.SECONDS);
-        return ttl != null ? ttl : -2;
+        return (ttl != null && ttl > 0) ? ttl : 0;
     }
 }

@@ -24,6 +24,13 @@ $critPath = "/api/v5/crit-trap"
 
 Write-Host "`n== Step 1: Seeding Test Decoys via Admin API =="
 try {
+    $allDecoys = Invoke-RestMethod -Uri "http://localhost:8080/api/decoy/admin"
+    foreach ($d in $allDecoys) {
+        if ($d.endpointPath -eq $lowPath -or $d.endpointPath -eq $medPath -or $d.endpointPath -eq $critPath) {
+            Invoke-RestMethod -Uri "http://localhost:8080/api/decoy/admin/$($d.id)" -Method Delete | Out-Null
+        }
+    }
+
     $decoyLow = Invoke-RestMethod -Uri "http://localhost:8080/api/decoy/admin" -Method Post -ContentType "application/json" -Body (@{ name="v5 low trap"; endpointPath=$lowPath; riskLevel="LOW" } | ConvertTo-Json)
     $decoyMed = Invoke-RestMethod -Uri "http://localhost:8080/api/decoy/admin" -Method Post -ContentType "application/json" -Body (@{ name="v5 med trap"; endpointPath=$medPath; riskLevel="MEDIUM" } | ConvertTo-Json)
     $decoyCrit = Invoke-RestMethod -Uri "http://localhost:8080/api/decoy/admin" -Method Post -ContentType "application/json" -Body (@{ name="v5 crit trap"; endpointPath=$critPath; riskLevel="CRITICAL" } | ConvertTo-Json)
@@ -72,8 +79,9 @@ try {
     Check "Score hit $($lastAss3.score) (CRITICAL)" ($lastAss3.score -ge 75 -and $lastAss3.level -eq "CRITICAL")
 
     $blockStatusCrit = Invoke-RestMethod -Uri "http://localhost:8080/api/threat/blocklist/${simIp}"
+    $ttl = if ($null -ne $blockStatusCrit.remainingTtlSeconds) { $blockStatusCrit.remainingTtlSeconds } else { $blockStatusCrit.ttlSeconds }
     Check "Redis block created for ${simIp} (blocked=true)" ($blockStatusCrit.blocked -eq $true)
-    Check "Redis block TTL is valid (~300 seconds)" ($blockStatusCrit.ttlSeconds -gt 280 -and $blockStatusCrit.ttlSeconds -le 300)
+    Check "Redis block TTL is valid (~300 seconds)" ($ttl -gt 280 -and $ttl -le 300)
 
     $lastEvtMsgCrit = Invoke-RestMethod -Uri "http://localhost:8080/api/threat/last-assessment-event"
     Check "ThreatAssessmentEvent published with blocked=true & blockExpiresAt" ($lastEvtMsgCrit.blocked -eq $true -and $null -ne $lastEvtMsgCrit.blockExpiresAt)

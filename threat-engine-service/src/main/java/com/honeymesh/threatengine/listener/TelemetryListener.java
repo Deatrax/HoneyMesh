@@ -28,6 +28,7 @@ public class TelemetryListener {
     private final ThreatScoringService threatScoringService;
     private final BlocklistService blocklistService;
     private final ThreatAssessmentPublisher threatAssessmentPublisher;
+    private final com.honeymesh.threatengine.service.ThreatAssessmentHistoryService threatAssessmentHistoryService;
 
     private volatile TelemetryEvent lastEvent;
     private volatile CorrelationSnapshot lastSnapshot;
@@ -38,12 +39,14 @@ public class TelemetryListener {
                              CorrelationService correlationService,
                              ThreatScoringService threatScoringService,
                              BlocklistService blocklistService,
-                             ThreatAssessmentPublisher threatAssessmentPublisher) {
+                             ThreatAssessmentPublisher threatAssessmentPublisher,
+                             com.honeymesh.threatengine.service.ThreatAssessmentHistoryService threatAssessmentHistoryService) {
         this.redisTemplate = redisTemplate;
         this.correlationService = correlationService;
         this.threatScoringService = threatScoringService;
         this.blocklistService = blocklistService;
         this.threatAssessmentPublisher = threatAssessmentPublisher;
+        this.threatAssessmentHistoryService = threatAssessmentHistoryService;
     }
 
     @RabbitListener(queues = "threat-engine.telemetry-queue")
@@ -74,7 +77,7 @@ public class TelemetryListener {
                     event.sourceIp(), assessment.score(), assessment.level(), assessment.reasons());
         }
 
-        // Phase 4: Construct and publish ThreatAssessmentEvent integration message
+        // Phase 4: Construct ThreatAssessmentEvent integration message
         ThreatAssessmentEvent assessmentEvent = new ThreatAssessmentEvent(
                 UUID.randomUUID().toString(),
                 event.sourceIp(),
@@ -91,8 +94,13 @@ public class TelemetryListener {
         );
         this.lastAssessmentEvent = assessmentEvent;
 
+        // Phase 6: Store in Redis bounded recent-history list (max 50) for dashboard
+        threatAssessmentHistoryService.saveRecentAssessment(assessmentEvent);
+
+        // Phase 4: Publish integration event to RabbitMQ
         threatAssessmentPublisher.publish(assessmentEvent);
     }
+
 
     public TelemetryEvent getLastEvent() {
         return lastEvent;
