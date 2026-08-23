@@ -1,0 +1,85 @@
+package com.honeymesh.decoy.controller;
+
+import com.honeymesh.decoy.config.RabbitConfig;
+import com.honeymesh.decoy.entity.Decoy;
+import com.honeymesh.decoy.event.TelemetryEvent;
+import com.honeymesh.decoy.service.DecoyService;
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.time.Instant;
+import java.util.Map;
+import java.util.Set;
+
+/**
+ * The actual decoys. Any path NOT claimed by a real controller (admin CRUD,
+ * ping, actuator) falls through to here. If that path matches an enabled
+ * Decoy's configured endpointPath, we record a real telemetry hit and
+ * publish it — this is what replaces the old manual /test-event trigger.
+ *
+ * IMPORTANT: this only works because the gateway has a catch-all route
+ * sending unmatched traffic to decoy-service — see RouteConfig.java. Without
+ * that, a request to e.g. /api/admin/db-backup never reaches this service at
+ * all, since the gateway previously only forwarded /api/decoy/** here.
+ */
+@RestController
+public class HoneypotController {
+
+    // Defense in depth: Spring MVC's own routing already prefers the more
+    // specific mappings in DecoyAdminController/DecoyController over this
+    // class's "/**", so this shouldn't be strictly necessary — but it's
+    // free insurance against this wildcard ever swallowing something it
+    // shouldn't (actuator, error dispatch).
+    private static final Set<String> RESERVED_PREFIXES =
+            Set.of("/api/decoy/admin", "/api/decoy/ping", "/actuator", "/error");
+
+    private final DecoyService decoyService;
+    private final RabbitTemplate rabbitTemplate;
+
+    public HoneypotController(DecoyService decoyService, RabbitTemplate rabbitTemplate) {
+        this.decoyService = decoyService;
+        this.rabbitTemplate = rabbitTemplate;
+    }
+
+    @RequestMapping("/**")
+    public ResponseEntity<Map<String, String>> handleHit(HttpServletRequest request) {
+        String path = request.getRequestURI();
+
+        if (RESERVED_PREFIXES.stream().anyMatch(path::startsWith)) {
+            return ResponseEntity.notFound().build();
+        }
+
+        return decoyService.findByEndpointPath(path)
+                .filter(Decoy::isEnabled)
+                .map(decoy -> {
+                    publishHit(decoy, request);
+                    return ResponseEntity.ok(Map.of("status", "ok"));
+                })
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    private void publishHit(Decoy decoy, HttpServletRequest request) {
+        TelemetryEvent event = new TelemetryEvent(
+                String.valueOf(decoy.getId()),
+                resolveClientIp(request),
+                decoy.getEndpointPath(),
+                Instant.now()
+        );
+        rabbitTemplate.convertAndSend(RabbitConfig.EXCHANGE, RabbitConfig.TELEMETRY_ROUTING_KEY, event);
+    }
+
+    // Requests arrive here already proxied through the gateway, so
+    // request.getRemoteAddr() would return the GATEWAY's container IP, not
+    // the real caller's — every hit would show the same wrong source IP.
+    // Spring Cloud Gateway adds X-Forwarded-For by default; read that first.
+    private String resolveClientIp(HttpServletRequest request) {
+        String forwardedFor = request.getHeader("X-Forwarded-For");
+        if (forwardedFor != null && !forwardedFor.isBlank()) {
+            return forwardedFor.split(",")[0].trim();
+        }
+        return request.getRemoteAddr();
+    }
+}

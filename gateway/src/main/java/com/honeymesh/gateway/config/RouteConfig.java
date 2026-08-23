@@ -32,6 +32,15 @@ public class RouteConfig {
                 .route("incident-service-ws", r -> r
                         .path("/ws/**")
                         .uri("ws://incident-service:8083"))
+                // Catch-all: honeypot endpoints (/api/admin/db-backup, etc.)
+                // are dynamically configured, not fixed paths — anything not
+                // claimed by a route above falls through here to
+                // decoy-service's HoneypotController, which checks whether
+                // the path matches a configured Decoy. MUST stay last: route
+                // order = match priority, first match wins.
+                .route("decoy-honeypot-catchall", r -> r
+                        .path("/**")
+                        .uri("http://decoy-service:8081"))
                 .build();
     }
 }
