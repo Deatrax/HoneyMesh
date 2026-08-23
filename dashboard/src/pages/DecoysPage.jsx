@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import DecoyForm from '../components/DecoyForm.jsx'
 
 const RISK_COLORS = {
   LOW: '#0f6e56',
@@ -49,9 +50,10 @@ export default function DecoysPage() {
   return (
     <div>
       <h1>Decoys</h1>
+      <DecoyForm onCreated={fetchDecoys} />
 
       {decoys.length === 0 ? (
-        <p>No decoys yet. (Create form lands in step 4.)</p>
+        <p>No decoys yet — create one above.</p>
       ) : (
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
