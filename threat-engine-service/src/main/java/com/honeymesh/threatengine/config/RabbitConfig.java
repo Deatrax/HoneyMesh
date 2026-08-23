@@ -17,6 +17,9 @@ public class RabbitConfig {
     public static final String TELEMETRY_QUEUE = "threat-engine.telemetry-queue";
     public static final String TELEMETRY_ROUTING_KEY = "decoy.telemetry.recorded";
 
+    public static final String ASSESSMENT_QUEUE = "incident-service.threat-assessment-queue";
+    public static final String ASSESSMENT_ROUTING_KEY = "threat.assessment.created";
+
     @Bean
     public TopicExchange honeymeshExchange() {
         return new TopicExchange(EXCHANGE);
@@ -31,6 +34,17 @@ public class RabbitConfig {
     public Binding telemetryBinding(Queue telemetryQueue, TopicExchange honeymeshExchange) {
         return BindingBuilder.bind(telemetryQueue).to(honeymeshExchange).with(TELEMETRY_ROUTING_KEY);
     }
+
+    @Bean
+    public Queue threatAssessmentQueue() {
+        return new Queue(ASSESSMENT_QUEUE, true);
+    }
+
+    @Bean
+    public Binding threatAssessmentBinding(Queue threatAssessmentQueue, TopicExchange honeymeshExchange) {
+        return BindingBuilder.bind(threatAssessmentQueue).to(honeymeshExchange).with(ASSESSMENT_ROUTING_KEY);
+    }
+
 
     /**
      * TypePrecedence.INFERRED is the important line in this whole file.
