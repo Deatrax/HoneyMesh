@@ -50,18 +50,23 @@ class TelemetryListenerPhase4Test {
     @Mock
     private com.honeymesh.threatengine.service.ThreatAssessmentHistoryService historyService;
 
+    @Mock
+    private com.honeymesh.threatengine.service.TelemetryIdempotencyService idempotencyService;
+
     private TelemetryListener telemetryListener;
 
     @BeforeEach
     void setUp() {
         lenient().when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        lenient().when(idempotencyService.tryClaim(any())).thenReturn(true);
         telemetryListener = new TelemetryListener(
                 redisTemplate,
                 correlationService,
                 threatScoringService,
                 blocklistService,
                 threatAssessmentPublisher,
-                historyService
+                historyService,
+                idempotencyService
         );
     }
 

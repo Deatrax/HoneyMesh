@@ -29,6 +29,7 @@ public class TelemetryListener {
     private final BlocklistService blocklistService;
     private final ThreatAssessmentPublisher threatAssessmentPublisher;
     private final com.honeymesh.threatengine.service.ThreatAssessmentHistoryService threatAssessmentHistoryService;
+    private final com.honeymesh.threatengine.service.TelemetryIdempotencyService idempotencyService;
 
     private volatile TelemetryEvent lastEvent;
     private volatile CorrelationSnapshot lastSnapshot;
@@ -40,65 +41,87 @@ public class TelemetryListener {
                              ThreatScoringService threatScoringService,
                              BlocklistService blocklistService,
                              ThreatAssessmentPublisher threatAssessmentPublisher,
-                             com.honeymesh.threatengine.service.ThreatAssessmentHistoryService threatAssessmentHistoryService) {
+                             com.honeymesh.threatengine.service.ThreatAssessmentHistoryService threatAssessmentHistoryService,
+                             com.honeymesh.threatengine.service.TelemetryIdempotencyService idempotencyService) {
         this.redisTemplate = redisTemplate;
         this.correlationService = correlationService;
         this.threatScoringService = threatScoringService;
         this.blocklistService = blocklistService;
         this.threatAssessmentPublisher = threatAssessmentPublisher;
         this.threatAssessmentHistoryService = threatAssessmentHistoryService;
+        this.idempotencyService = idempotencyService;
     }
 
     @RabbitListener(queues = "threat-engine.telemetry-queue")
     public void onTelemetryEvent(TelemetryEvent event) {
-        this.lastEvent = event;
-
-        // Baseline: Per-decoy atomic hit count increment
-        redisTemplate.opsForValue().increment("honeymesh:telemetry:count:" + event.decoyId());
-
-        // Phase 1: Rolling-window correlation
-        CorrelationSnapshot snapshot = correlationService.correlate(event);
-        this.lastSnapshot = snapshot;
-
-        // Phase 2: Threat scoring assessment
-        ThreatAssessment assessment = threatScoringService.assess(snapshot);
-        this.lastAssessment = assessment;
-
-        // Phase 3: Temporary Redis blocklisting for CRITICAL threat level
-        boolean isBlocked = false;
-        Instant blockExpiresAt = null;
-        if (assessment.level() == ThreatLevel.CRITICAL) {
-            blocklistService.block(event.sourceIp());
-            isBlocked = true;
-            blockExpiresAt = Instant.now().plusSeconds(BlocklistService.DEFAULT_BLOCK_TTL_SECONDS);
-            log.warn("CRITICAL threat detected for IP {}: Block entry created/refreshed in Redis", event.sourceIp());
-        } else {
-            log.info("Threat Assessment for IP {}: score={}, level={}, reasons={}",
-                    event.sourceIp(), assessment.score(), assessment.level(), assessment.reasons());
+        if (event == null) {
+            return;
         }
 
-        // Phase 4: Construct ThreatAssessmentEvent integration message
-        ThreatAssessmentEvent assessmentEvent = new ThreatAssessmentEvent(
-                UUID.randomUUID().toString(),
-                event.sourceIp(),
-                event.decoyId(),
-                event.endpoint(),
-                assessment.score(),
-                assessment.level(),
-                assessment.reasons(),
-                snapshot.recentHitCount(),
-                snapshot.distinctDecoyCount(),
-                isBlocked,
-                blockExpiresAt,
-                Instant.now()
-        );
-        this.lastAssessmentEvent = assessmentEvent;
+        // Phase 8: Idempotency claim check BEFORE any business side-effects
+        if (!idempotencyService.tryClaim(event)) {
+            log.info("Skipping duplicate telemetry event for decoy={} sourceIp={} occurredAt={}",
+                    event.decoyId(), event.sourceIp(), event.occurredAt());
+            return;
+        }
 
-        // Phase 6: Store in Redis bounded recent-history list (max 50) for dashboard
-        threatAssessmentHistoryService.saveRecentAssessment(assessmentEvent);
+        try {
+            this.lastEvent = event;
 
-        // Phase 4: Publish integration event to RabbitMQ
-        threatAssessmentPublisher.publish(assessmentEvent);
+            // Baseline: Per-decoy atomic hit count increment
+            redisTemplate.opsForValue().increment("honeymesh:telemetry:count:" + event.decoyId());
+
+            // Phase 1: Rolling-window correlation
+            CorrelationSnapshot snapshot = correlationService.correlate(event);
+            this.lastSnapshot = snapshot;
+
+            // Phase 2: Threat scoring assessment
+            ThreatAssessment assessment = threatScoringService.assess(snapshot);
+            this.lastAssessment = assessment;
+
+            // Phase 3: Temporary Redis blocklisting for CRITICAL threat level
+            boolean isBlocked = false;
+            Instant blockExpiresAt = null;
+            if (assessment.level() == ThreatLevel.CRITICAL) {
+                blocklistService.block(event.sourceIp());
+                isBlocked = true;
+                blockExpiresAt = Instant.now().plusSeconds(BlocklistService.DEFAULT_BLOCK_TTL_SECONDS);
+                log.warn("CRITICAL threat detected for IP {}: Block entry created/refreshed in Redis", event.sourceIp());
+            } else {
+                log.info("Threat Assessment for IP {}: score={}, level={}, reasons={}",
+                        event.sourceIp(), assessment.score(), assessment.level(), assessment.reasons());
+            }
+
+            // Phase 4: Construct ThreatAssessmentEvent integration message
+            ThreatAssessmentEvent assessmentEvent = new ThreatAssessmentEvent(
+                    UUID.randomUUID().toString(),
+                    event.sourceIp(),
+                    event.decoyId(),
+                    event.endpoint(),
+                    assessment.score(),
+                    assessment.level(),
+                    assessment.reasons(),
+                    snapshot.recentHitCount(),
+                    snapshot.distinctDecoyCount(),
+                    isBlocked,
+                    blockExpiresAt,
+                    Instant.now()
+            );
+            this.lastAssessmentEvent = assessmentEvent;
+
+            // Phase 6: Store in Redis bounded recent-history list (max 50) for dashboard
+            threatAssessmentHistoryService.saveRecentAssessment(assessmentEvent);
+
+            // Phase 4: Publish integration event to RabbitMQ
+            threatAssessmentPublisher.publish(assessmentEvent);
+
+            // Phase 8: Mark event processing attempt as DONE
+            idempotencyService.markCompleted(event);
+        } catch (Exception e) {
+            // Release claim on failure so RabbitMQ redelivery can retry
+            idempotencyService.releaseClaim(event);
+            throw e;
+        }
     }
 
 
