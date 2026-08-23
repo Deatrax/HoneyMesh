@@ -61,11 +61,12 @@ public class HoneypotController {
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
-    private void publishHit(Decoy decoy, HttpServletRequest request) {
+        private void publishHit(Decoy decoy, HttpServletRequest request) {
         TelemetryEvent event = new TelemetryEvent(
                 String.valueOf(decoy.getId()),
                 resolveClientIp(request),
                 decoy.getEndpointPath(),
+                decoy.getRiskLevel(),
                 Instant.now()
         );
         rabbitTemplate.convertAndSend(RabbitConfig.EXCHANGE, RabbitConfig.TELEMETRY_ROUTING_KEY, event);
