@@ -13,10 +13,40 @@ spring:
       ddl-auto: update
     show-sql: false
     open-in-view: false
+  # Day 2 addition: needed to consume Prince's ThreatAssessmentEvent messages.
+  rabbitmq:
+    host: ${SPRING_RABBITMQ_HOST:localhost}
+    port: 5672
+    username: ${SPRING_RABBITMQ_USERNAME:honeymesh}
+    password: ${SPRING_RABBITMQ_PASSWORD:honeymesh_dev_pw}
   data:
     redis:
       host: ${SPRING_DATA_REDIS_HOST:localhost}
       port: 6379
+  mvc:
+    problemdetails:
+      # Turns ResponseStatusException(status, "reason") into a proper
+      # RFC 7807 JSON body with a "detail" field, instead of a bare status
+      # code. The React dashboard reads response.detail to show real error
+      # messages (e.g. "Cannot move an incident from OPEN to RESOLVED").
+      enabled: true
+
+# Day 2 addition: only assessments at this level or above open/update an
+# Incident. Threat Engine publishes an assessment for every single decoy
+# hit (see TelemetryListener.java in threat-engine-service), so without
+# this filter every hit would become an incident. Ordinal comparison:
+# INFORMATIONAL < SUSPICIOUS < HIGH < CRITICAL.
+incident:
+  auto-create:
+    min-level: ${INCIDENT_MIN_LEVEL:HIGH}
+
+# Day 2 addition: JWT signing config. The default secret below is long
+# enough for HS256 (needs >= 256 bits / 32 chars) and is fine for the
+# demo, but it's a real secret checked into git — swap it for a proper
+# generated one via the JWT_SECRET env var before any real deployment.
+jwt:
+  secret: ${JWT_SECRET:honeymesh-dev-jwt-signing-secret-change-before-any-real-deployment-2026}
+  expiration-ms: ${JWT_EXPIRATION_MS:28800000} # 8 hours - long enough to survive one demo session
 
 management:
   endpoints:
