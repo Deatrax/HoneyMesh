@@ -35,6 +35,14 @@ public class RouteConfig {
                 .route("incident-service-ws", r -> r
                         .path("/ws/**")
                         .uri("ws://incident-service:8083"))
+                // The dummy target site — specific, known pages only, so
+                // this can't accidentally swallow anything. Runs as a
+                // plain host process (not in Docker), reached via Docker
+                // Desktop's host.docker.internal. Must come BEFORE the
+                // catch-all below: route order = match priority.
+                .route("dummy-website", r -> r
+                        .path("/", "/about", "/services", "/contact")
+                        .uri("http://host.docker.internal:3001"))
                 // Catch-all: honeypot endpoints (/api/admin/db-backup, etc.)
                 // are dynamically configured, not fixed paths — anything not
                 // claimed by a route above falls through here to
