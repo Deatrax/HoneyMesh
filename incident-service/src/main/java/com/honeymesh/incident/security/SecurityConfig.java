@@ -42,12 +42,34 @@ public class SecurityConfig {
                 .roles("ADMIN", "ANALYST")
                 .build();
 
+        // Kept as a pure ANALYST (no ADMIN role) on purpose — this is the
+        // account scripts/verify.sh logs in as to prove the RBAC rejection
+        // on assign/unblock actually works, not just that login works.
         var analyst = User.withUsername("analyst")
                 .password(passwordEncoder.encode("analyst123"))
                 .roles("ANALYST")
                 .build();
 
-        return new InMemoryUserDetailsManager(admin, analyst);
+        // One named account per team member, each full ADMIN — "multiple
+        // admins" without building a real user table under a deadline.
+        // Same demo-scale trade-off as the two accounts above; same thing
+        // to mention in the report.
+        var mahim = User.withUsername("mahim")
+                .password(passwordEncoder.encode("mahim123"))
+                .roles("ADMIN", "ANALYST")
+                .build();
+
+        var prince = User.withUsername("prince")
+                .password(passwordEncoder.encode("prince123"))
+                .roles("ADMIN", "ANALYST")
+                .build();
+
+        var alfi = User.withUsername("alfi")
+                .password(passwordEncoder.encode("alfi123"))
+                .roles("ADMIN", "ANALYST")
+                .build();
+
+        return new InMemoryUserDetailsManager(admin, analyst, mahim, prince, alfi);
     }
 
     @Bean
@@ -91,6 +113,7 @@ public class SecurityConfig {
                         // broader ones below them — same "first match
                         // wins" rule the gateway's RouteConfig uses.
                         .requestMatchers(HttpMethod.PATCH, "/api/incidents/*/assign").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PATCH, "/api/incidents/*/unblock").hasRole("ADMIN")
                         .requestMatchers("/actuator/**").hasRole("ADMIN")
                         // Everything else under /api/incidents just needs
                         // a valid token, either role.

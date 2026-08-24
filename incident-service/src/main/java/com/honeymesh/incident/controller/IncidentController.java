@@ -5,6 +5,7 @@ import com.honeymesh.incident.dto.IncidentActivityResponse;
 import com.honeymesh.incident.dto.IncidentResponse;
 import com.honeymesh.incident.dto.NoteRequest;
 import com.honeymesh.incident.dto.StatusChangeRequest;
+import com.honeymesh.incident.dto.UnblockRequest;
 import com.honeymesh.incident.entity.Incident;
 import com.honeymesh.incident.service.IncidentService;
 import jakarta.validation.Valid;
@@ -78,6 +79,16 @@ public class IncidentController {
     public IncidentResponse assign(@PathVariable Long id, @Valid @RequestBody AssignRequest request,
                                     Authentication authentication) {
         Incident incident = incidentService.assign(id, request.analyst(), request.version(), authentication.getName());
+        return IncidentResponse.from(incident);
+    }
+
+    // Also admin-only — see SecurityConfig's matching rule for this path.
+    // A manual override on top of the 5-minute auto-expiry, not a
+    // replacement for it.
+    @PatchMapping("/{id}/unblock")
+    public IncidentResponse unblock(@PathVariable Long id, @Valid @RequestBody UnblockRequest request,
+                                     Authentication authentication) {
+        Incident incident = incidentService.unblock(id, request.version(), authentication.getName());
         return IncidentResponse.from(incident);
     }
 }

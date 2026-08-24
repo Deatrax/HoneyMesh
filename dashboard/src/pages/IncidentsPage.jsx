@@ -156,6 +156,17 @@ export default function IncidentsPage() {
     })
   }
 
+  async function unblock(incident) {
+    await runAction(async () => {
+      const res = await authFetch(`/api/incidents/${incident.id}/unblock`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ version: incident.version }),
+      })
+      if (!res.ok) throw new Error(await readError(res))
+    })
+  }
+
   async function submitNote(incident) {
     if (!noteText.trim()) return
     await runAction(async () => {
@@ -305,6 +316,14 @@ export default function IncidentsPage() {
                       style={{ padding: '0.4rem 0.8rem', borderRadius: '4px', border: '1px solid #5b3e96', backgroundColor: '#fff', color: '#5b3e96', cursor: 'pointer', fontSize: '0.85rem' }}
                     >
                       Assign to me
+                    </button>
+                  )}
+                  {isAdmin && selected.blocked && (
+                    <button
+                      onClick={() => unblock(selected)}
+                      style={{ padding: '0.4rem 0.8rem', borderRadius: '4px', border: '1px solid #993c1d', backgroundColor: '#fff', color: '#993c1d', cursor: 'pointer', fontSize: '0.85rem' }}
+                    >
+                      Unblock {selected.sourceIp}
                     </button>
                   )}
                 </div>

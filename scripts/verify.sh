@@ -120,6 +120,13 @@ ASSIGN_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X PATCH \
 [ "$ASSIGN_STATUS" = "403" ] || [ "$ASSIGN_STATUS" = "401" ]
 check "analyst (non-admin) token is blocked on the admin-only assign endpoint (got $ASSIGN_STATUS)" $?
 
+UNBLOCK_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X PATCH \
+  -H "Authorization: Bearer ${ANALYST_TOKEN}" -H "Content-Type: application/json" \
+  -d '{"version":0}' \
+  "http://localhost:8080/api/incidents/999999/unblock")
+[ "$UNBLOCK_STATUS" = "403" ] || [ "$UNBLOCK_STATUS" = "401" ]
+check "analyst (non-admin) token is blocked on the admin-only unblock endpoint (got $UNBLOCK_STATUS)" $?
+
 echo
 echo "== 8. Full chain: escalation -> enforcement -> auto-incident =="
 echo "   (this is the actual end-to-end path your demo relies on)"

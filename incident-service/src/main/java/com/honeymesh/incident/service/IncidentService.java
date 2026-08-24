@@ -14,6 +14,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
@@ -35,6 +36,12 @@ public class IncidentService {
 
     private static final Logger log = LoggerFactory.getLogger(IncidentService.class);
 
+    // Same key format BlocklistService (threat-engine-service) writes and
+    // decoy-service's HoneypotController reads — deliberately shared Redis
+    // state, not a new HTTP call to another service, same reasoning as the
+    // enforcement fix in HoneypotController.
+    private static final String BLOCK_KEY_PREFIX = "honeymesh:block:";
+
     // OPEN -> INVESTIGATING -> CONTAINED -> RESOLVED, plus a shortcut
     // straight from INVESTIGATING to RESOLVED for false positives.
     // RESOLVED has no allowed next states — it's terminal.
@@ -49,6 +56,7 @@ public class IncidentService {
     private final IncidentActivityRepository activityRepository;
     private final ProcessedAssessmentRepository processedAssessmentRepository;
     private final IncidentBroadcaster broadcaster;
+    private final StringRedisTemplate redisTemplate;
 
     // Only assessments at or above this level open/update an incident.
     // Threat Engine publishes one for every single decoy hit, so without
@@ -62,11 +70,13 @@ public class IncidentService {
                             IncidentActivityRepository activityRepository,
                             ProcessedAssessmentRepository processedAssessmentRepository,
                             IncidentBroadcaster broadcaster,
+                            StringRedisTemplate redisTemplate,
                             @Value("${incident.auto-create.min-level:HIGH}") ThreatLevel minLevelForIncident) {
         this.incidentRepository = incidentRepository;
         this.activityRepository = activityRepository;
         this.processedAssessmentRepository = processedAssessmentRepository;
         this.broadcaster = broadcaster;
+        this.redisTemplate = redisTemplate;
         this.minLevelForIncident = minLevelForIncident;
     }
 
@@ -222,6 +232,27 @@ public class IncidentService {
         incident = flushOrConflict(incident);
 
         addActivity(incident, actor, "Status changed from " + oldStatus + " to " + newStatus + ".");
+        broadcaster.incidentUpserted(incident);
+        return incident;
+    }
+
+    // Admin-only (see SecurityConfig). Deletes the same Redis key
+    // BlocklistService writes and HoneypotController checks — this is a
+    // manual override on top of the 5-minute auto-expiry, not a
+    // replacement for it. If the incident wasn't actually blocked, this
+    // is a harmless no-op: Redis DEL on a missing key just does nothing.
+    @Transactional
+    public Incident unblock(Long id, Long expectedVersion, String actor) {
+        Incident incident = findById(id);
+        checkVersion(incident, expectedVersion);
+
+        redisTemplate.delete(BLOCK_KEY_PREFIX + incident.getSourceIp());
+
+        incident.setBlocked(false);
+        incident.setUpdatedAt(Instant.now());
+        incident = flushOrConflict(incident);
+
+        addActivity(incident, actor, "Manually unblocked " + incident.getSourceIp() + " (overriding auto-expiry).");
         broadcaster.incidentUpserted(incident);
         return incident;
     }

@@ -24,7 +24,13 @@ echo "======================================================="
 echo "An attacker who found this system starts by mapping what's listening."
 pause
 
-nmap -p 5432,6379,5672,15672,8080,8081,8082,8083 -sV localhost
+if command -v nmap >/dev/null 2>&1; then
+  nmap -p 5432,6379,5672,15672,8080,8081,8082,8083 -sV localhost
+else
+  echo "(nmap not installed here — skipping the live scan, but this is what"
+  echo " it would show: ports 5432/6379/5672/15672/8080-8083 open, with"
+  echo " 8080 identified as the Spring Cloud Gateway.)"
+fi
 
 echo
 echo "Port 8080 is the intended front door — the Gateway. Ports 8081-8083"
@@ -45,8 +51,8 @@ WORDLIST=(
   "/api/admin/users"
   "/api/admin/db-backup"
   "/api/config/database"
-  "/api/finance/payroll"
-  "/api/debug/environment"
+  "/api/admin/backup-logs"
+  "/api/v2/status"
   "/api/v1/health"
   "/.env"
   "/api/internal/metrics"
