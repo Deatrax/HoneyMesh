@@ -12,18 +12,17 @@ function App() {
     <AuthProvider>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
-        <Route element={<Layout />}>
+        <Route
+          element={
+            <RequireAuth>
+              <Layout />
+            </RequireAuth>
+          }
+        >
           <Route index element={<Navigate to="/decoys" replace />} />
           <Route path="/decoys" element={<DecoysPage />} />
           <Route path="/threats" element={<ThreatsPage />} />
-          <Route
-            path="/incidents"
-            element={
-              <RequireAuth>
-                <IncidentsPage />
-              </RequireAuth>
-            }
-          />
+          <Route path="/incidents" element={<IncidentsPage />} />
         </Route>
       </Routes>
     </AuthProvider>
