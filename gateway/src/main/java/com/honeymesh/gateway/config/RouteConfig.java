@@ -29,6 +29,9 @@ public class RouteConfig {
                 .route("incident-service", r -> r
                         .path("/api/incidents/**")
                         .uri("http://incident-service:8083"))
+                .route("incident-service-auth", r -> r         
+                        .path("/api/auth/**")                   
+                        .uri("http://incident-service:8083")) 
                 .route("incident-service-ws", r -> r
                         .path("/ws/**")
                         .uri("ws://incident-service:8083"))

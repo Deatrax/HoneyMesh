@@ -13,6 +13,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
+import jakarta.persistence.FetchType;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -63,7 +64,7 @@ public class Incident {
     // ("incident_reasons") automatically — one row per reason string,
     // linked back to this incident by incident_id. We just work with a
     // plain List<String> in Java; Hibernate handles the join table.
-    @ElementCollection
+    @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "incident_reasons", joinColumns = @JoinColumn(name = "incident_id"))
     @Column(name = "reason", length = 500)
     @Builder.Default
