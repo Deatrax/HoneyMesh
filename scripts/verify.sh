@@ -16,7 +16,15 @@ set -uo pipefail
 PASS=0
 FAIL=0
 
+DOCKER="docker"
+if ! docker info >/dev/null 2>&1; then
+  if command -v powershell.exe >/dev/null 2>&1; then
+    DOCKER="powershell.exe -Command docker"
+  fi
+fi
+
 check() {
+
   local desc="$1"
   local result="$2" # 0 = pass, anything else = fail
   if [ "$result" -eq 0 ]; then
@@ -74,8 +82,8 @@ check "cleaned up test decoy" $?
 
 echo
 echo "== 4. Postgres schemas =="
-SCHEMAS=$(docker exec honeymesh-postgres psql -U honeymesh -d honeymesh -tAc \
-  "SELECT schema_name FROM information_schema.schemata;" 2>/dev/null)
+SCHEMAS=$($DOCKER exec honeymesh-postgres psql -U honeymesh -d honeymesh -tAc \
+  "SELECT schema_name FROM information_schema.schemata;" 2>/dev/null | tr -d '\r')
 for s in decoy threat_engine incident; do
   echo "$SCHEMAS" | grep -q "^${s}$"
   check "schema '$s' exists" $?
@@ -83,8 +91,10 @@ done
 
 echo
 echo "== 5. Redis reachable =="
-docker exec honeymesh-redis redis-cli ping 2>/dev/null | grep -q PONG
+$DOCKER exec honeymesh-redis redis-cli ping 2>/dev/null | tr -d '\r' | grep -q PONG
 check "redis responds to PING" $?
+
+
 
 echo
 echo "== 6. RabbitMQ management API reachable =="

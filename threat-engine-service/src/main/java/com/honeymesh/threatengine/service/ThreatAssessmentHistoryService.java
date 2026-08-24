@@ -1,0 +1,85 @@
+package com.honeymesh.threatengine.service;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.honeymesh.threatengine.event.ThreatAssessmentEvent;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.stereotype.Service;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
+@Service
+public class ThreatAssessmentHistoryService {
+
+    private static final Logger log = LoggerFactory.getLogger(ThreatAssessmentHistoryService.class);
+
+    public static final String RECENT_ASSESSMENTS_KEY = "honeymesh:threat:recent-assessments";
+    public static final int MAX_RECENT_ASSESSMENTS = 50;
+
+    private final StringRedisTemplate redisTemplate;
+    private final ObjectMapper objectMapper;
+
+    public ThreatAssessmentHistoryService(StringRedisTemplate redisTemplate, ObjectMapper objectMapper) {
+        this.redisTemplate = redisTemplate;
+        this.objectMapper = objectMapper;
+    }
+
+    /**
+     * Saves a ThreatAssessmentEvent into a bounded Redis list (max 50 entries).
+     * LPUSH prepends the new JSON payload to the head of the list (newest first).
+     * LTRIM 0 49 keeps only the 50 most recent items, dropping older entries automatically.
+     */
+    public void saveRecentAssessment(ThreatAssessmentEvent event) {
+        if (event == null) return;
+        try {
+            String json = objectMapper.writeValueAsString(event);
+            // LPUSH adds the item to the front of the list (index 0)
+            redisTemplate.opsForList().leftPush(RECENT_ASSESSMENTS_KEY, json);
+            // LTRIM truncates the list to maintain exactly 50 items (indices 0 through 49)
+            redisTemplate.opsForList().trim(RECENT_ASSESSMENTS_KEY, 0, MAX_RECENT_ASSESSMENTS - 1);
+        } catch (JsonProcessingException e) {
+            log.error("Failed to serialize ThreatAssessmentEvent to JSON for Redis history", e);
+        }
+    }
+
+    /**
+     * Returns the most recent ThreatAssessmentEvent from Redis history (index 0),
+     * or null if history is empty.
+     */
+    public ThreatAssessmentEvent getLatestAssessment() {
+        String json = redisTemplate.opsForList().index(RECENT_ASSESSMENTS_KEY, 0);
+        if (json == null || json.isBlank()) {
+            return null;
+        }
+        try {
+            return objectMapper.readValue(json, ThreatAssessmentEvent.class);
+        } catch (JsonProcessingException e) {
+            log.error("Failed to deserialize latest ThreatAssessmentEvent from Redis", e);
+            return null;
+        }
+    }
+
+    /**
+     * Returns the list of recent ThreatAssessmentEvents (newest first), up to 50 items.
+     */
+    public List<ThreatAssessmentEvent> getRecentAssessments() {
+        List<String> rawJsonList = redisTemplate.opsForList().range(RECENT_ASSESSMENTS_KEY, 0, MAX_RECENT_ASSESSMENTS - 1);
+        if (rawJsonList == null || rawJsonList.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        List<ThreatAssessmentEvent> events = new ArrayList<>();
+        for (String json : rawJsonList) {
+            try {
+                events.add(objectMapper.readValue(json, ThreatAssessmentEvent.class));
+            } catch (JsonProcessingException e) {
+                log.error("Failed to deserialize ThreatAssessmentEvent item from Redis list", e);
+            }
+        }
+        return events;
+    }
+}
