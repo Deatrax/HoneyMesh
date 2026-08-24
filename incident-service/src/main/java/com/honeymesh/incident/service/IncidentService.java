@@ -257,6 +257,30 @@ public class IncidentService {
         return incident;
     }
 
+    // Admin-only, same as unblock. The only real difference from the
+    // automatic block BlocklistService sets: no Duration argument means
+    // Redis stores this key with no TTL at all — it never expires on its
+    // own, only unblock() above (or a manual Redis DEL) removes it.
+    // Works whether the incident is currently auto-blocked or not, since
+    // an admin might want to ban an IP the scoring never flagged as
+    // CRITICAL on its own.
+    @Transactional
+    public Incident permaBlock(Long id, Long expectedVersion, String actor) {
+        Incident incident = findById(id);
+        checkVersion(incident, expectedVersion);
+
+        redisTemplate.opsForValue().set(BLOCK_KEY_PREFIX + incident.getSourceIp(), "true");
+
+        incident.setBlocked(true);
+        incident.setBlockExpiresAt(null); // null = no expiry, not "already expired"
+        incident.setUpdatedAt(Instant.now());
+        incident = flushOrConflict(incident);
+
+        addActivity(incident, actor, "Permanently banned " + incident.getSourceIp() + " (no auto-expiry).");
+        broadcaster.incidentUpserted(incident);
+        return incident;
+    }
+
     // This check catches the vast majority of real conflicts (the
     // request already carries a version that's out of date the moment it
     // arrives). It is intentionally paired with flushOrConflict() below,

@@ -2,9 +2,12 @@ package com.honeymesh.decoy.controller;
 
 import com.honeymesh.decoy.dto.DecoyRequest;
 import com.honeymesh.decoy.dto.DecoyResponse;
+import com.honeymesh.decoy.dto.RequestForensics;
 import com.honeymesh.decoy.service.DecoyService;
+import com.honeymesh.decoy.service.RequestForensicsService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -22,9 +25,11 @@ import java.util.List;
 public class DecoyAdminController {
 
     private final DecoyService decoyService;
+    private final RequestForensicsService forensicsService;
 
-    public DecoyAdminController(DecoyService decoyService) {
+    public DecoyAdminController(DecoyService decoyService, RequestForensicsService forensicsService) {
         this.decoyService = decoyService;
+        this.forensicsService = forensicsService;
     }
 
     @GetMapping
@@ -35,6 +40,15 @@ public class DecoyAdminController {
     @GetMapping("/{id}")
     public DecoyResponse get(@PathVariable Long id) {
         return DecoyResponse.from(decoyService.findById(id));
+    }
+
+    // Two path segments after /admin/ (hit-detail/{ip}) — never collides
+    // with GET /{id} above, which only ever matches one segment.
+    @GetMapping("/hit-detail/{sourceIp}")
+    public ResponseEntity<RequestForensics> hitDetail(@PathVariable String sourceIp) {
+        return forensicsService.findBySourceIp(sourceIp)
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
     @PostMapping

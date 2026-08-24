@@ -4,6 +4,7 @@ import com.honeymesh.incident.dto.AssignRequest;
 import com.honeymesh.incident.dto.IncidentActivityResponse;
 import com.honeymesh.incident.dto.IncidentResponse;
 import com.honeymesh.incident.dto.NoteRequest;
+import com.honeymesh.incident.dto.PermaBlockRequest;
 import com.honeymesh.incident.dto.StatusChangeRequest;
 import com.honeymesh.incident.dto.UnblockRequest;
 import com.honeymesh.incident.entity.Incident;
@@ -89,6 +90,15 @@ public class IncidentController {
     public IncidentResponse unblock(@PathVariable Long id, @Valid @RequestBody UnblockRequest request,
                                      Authentication authentication) {
         Incident incident = incidentService.unblock(id, request.version(), authentication.getName());
+        return IncidentResponse.from(incident);
+    }
+
+    // Admin-only, same as unblock. See IncidentService.permaBlock() for
+    // the actual "no TTL" mechanics.
+    @PatchMapping("/{id}/perma-block")
+    public IncidentResponse permaBlock(@PathVariable Long id, @Valid @RequestBody PermaBlockRequest request,
+                                        Authentication authentication) {
+        Incident incident = incidentService.permaBlock(id, request.version(), authentication.getName());
         return IncidentResponse.from(incident);
     }
 }

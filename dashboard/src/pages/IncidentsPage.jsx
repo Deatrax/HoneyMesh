@@ -30,6 +30,7 @@ export default function IncidentsPage() {
   const [incidents, setIncidents] = useState([])
   const [selectedId, setSelectedId] = useState(null)
   const [activity, setActivity] = useState([])
+  const [forensics, setForensics] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [actionError, setActionError] = useState(null)
@@ -68,6 +69,23 @@ export default function IncidentsPage() {
     }
   }, [authFetch])
 
+  // Forensics lives on decoy-service, not incident-service — a separate
+  // fetch by sourceIp rather than a field on the incident itself. Missing
+  // (404) is expected once 30 minutes pass since the last hit; treat that
+  // as "nothing to show," not an error.
+  const fetchForensics = useCallback(async (sourceIp) => {
+    try {
+      const res = await authFetch(`/api/decoy/admin/hit-detail/${sourceIp}`)
+      if (!res.ok) {
+        setForensics(null)
+        return
+      }
+      setForensics(await res.json())
+    } catch {
+      setForensics(null)
+    }
+  }, [authFetch])
+
   // Initial load + 5s poll — same pattern ThreatsPage.jsx uses, so the
   // dashboard keeps working even if the WebSocket connection below drops.
   useEffect(() => {
@@ -79,10 +97,13 @@ export default function IncidentsPage() {
   useEffect(() => {
     if (!selectedId) {
       setActivity([])
+      setForensics(null)
       return
     }
     fetchActivity(selectedId)
-  }, [selectedId, fetchActivity])
+    const incident = incidents.find((i) => i.id === selectedId)
+    if (incident) fetchForensics(incident.sourceIp)
+  }, [selectedId, fetchActivity, fetchForensics, incidents])
 
   // Live updates: IncidentBroadcaster.java pushes
   // {"type":"incident.updated", "incident": {...}} over /ws/alerts every
@@ -159,6 +180,17 @@ export default function IncidentsPage() {
   async function unblock(incident) {
     await runAction(async () => {
       const res = await authFetch(`/api/incidents/${incident.id}/unblock`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ version: incident.version }),
+      })
+      if (!res.ok) throw new Error(await readError(res))
+    })
+  }
+
+  async function permaBlock(incident) {
+    await runAction(async () => {
+      const res = await authFetch(`/api/incidents/${incident.id}/perma-block`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ version: incident.version }),
@@ -286,7 +318,11 @@ export default function IncidentsPage() {
                 <div><span style={{ fontSize: '0.8rem', color: '#666', display: 'block' }}>Score</span><span style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>{selected.score} / 100</span></div>
                 <div><span style={{ fontSize: '0.8rem', color: '#666', display: 'block' }}>Status</span>{renderBadge(selected.status, STATUS_STYLES)}</div>
                 <div><span style={{ fontSize: '0.8rem', color: '#666', display: 'block' }}>Assigned Analyst</span><span>{selected.assignedAnalyst || 'Unassigned'}</span></div>
-                <div><span style={{ fontSize: '0.8rem', color: '#666', display: 'block' }}>Blocked</span><span style={{ fontWeight: 'bold', color: selected.blocked ? '#791f1f' : '#28a745' }}>{selected.blocked ? 'Yes' : 'No'}</span></div>
+                <div><span style={{ fontSize: '0.8rem', color: '#666', display: 'block' }}>Blocked</span>
+                  <span style={{ fontWeight: 'bold', color: selected.blocked ? '#791f1f' : '#28a745' }}>
+                    {!selected.blocked ? 'No' : selected.blockExpiresAt ? `Yes — until ${new Date(selected.blockExpiresAt).toLocaleTimeString()}` : 'Yes — permanent'}
+                  </span>
+                </div>
               </div>
 
               <div style={{ marginBottom: '1.25rem', paddingTop: '1rem', borderTop: '1px solid #e0e0e0' }}>
@@ -296,6 +332,37 @@ export default function IncidentsPage() {
                     {selected.reasons.map((reason, idx) => <li key={idx} style={{ marginBottom: '0.3rem' }}>{reason}</li>)}
                   </ul>
                 ) : <p style={{ margin: 0, fontSize: '0.85rem', color: '#888' }}>No specific reasons recorded.</p>}
+              </div>
+
+              <div style={{ marginBottom: '1.25rem', paddingTop: '1rem', borderTop: '1px solid #e0e0e0' }}>
+                <h3 style={{ fontSize: '0.95rem', margin: '0 0 0.5rem 0' }}>Request forensics</h3>
+                {forensics ? (
+                  <div style={{ fontSize: '0.85rem' }}>
+                    <div style={{ marginBottom: '0.5rem' }}>
+                      <span style={{ fontFamily: 'monospace', backgroundColor: '#e8f0fe', color: '#0c447c', padding: '0.1rem 0.4rem', borderRadius: '3px', marginRight: '0.5rem' }}>
+                        {forensics.method}
+                      </span>
+                      <span style={{ fontFamily: 'monospace' }}>{forensics.uri}</span>
+                    </div>
+                    <div style={{ color: '#666', marginBottom: '0.4rem' }}>
+                      Captured {new Date(forensics.capturedAt).toLocaleString()}
+                    </div>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+                      <tbody>
+                        {Object.entries(forensics.headers).map(([name, value]) => (
+                          <tr key={name} style={{ borderTop: '1px solid #eee' }}>
+                            <td style={{ padding: '0.3rem 0.5rem 0.3rem 0', color: '#666', fontFamily: 'monospace', whiteSpace: 'nowrap', verticalAlign: 'top' }}>{name}</td>
+                            <td style={{ padding: '0.3rem 0', fontFamily: 'monospace', wordBreak: 'break-all' }}>{value}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <p style={{ margin: 0, fontSize: '0.85rem', color: '#888' }}>
+                    No captured request on file for this source (older than 30 minutes, or never hit a live decoy path).
+                  </p>
+                )}
               </div>
 
               <div style={{ marginBottom: '1.25rem', paddingTop: '1rem', borderTop: '1px solid #e0e0e0' }}>
@@ -316,6 +383,14 @@ export default function IncidentsPage() {
                       style={{ padding: '0.4rem 0.8rem', borderRadius: '4px', border: '1px solid #5b3e96', backgroundColor: '#fff', color: '#5b3e96', cursor: 'pointer', fontSize: '0.85rem' }}
                     >
                       Assign to me
+                    </button>
+                  )}
+                  {isAdmin && !(selected.blocked && !selected.blockExpiresAt) && (
+                    <button
+                      onClick={() => permaBlock(selected)}
+                      style={{ padding: '0.4rem 0.8rem', borderRadius: '4px', border: '1px solid #791f1f', backgroundColor: '#fff', color: '#791f1f', cursor: 'pointer', fontSize: '0.85rem' }}
+                    >
+                      Perma-ban {selected.sourceIp}
                     </button>
                   )}
                   {isAdmin && selected.blocked && (

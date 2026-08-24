@@ -114,6 +114,7 @@ public class SecurityConfig {
                         // wins" rule the gateway's RouteConfig uses.
                         .requestMatchers(HttpMethod.PATCH, "/api/incidents/*/assign").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PATCH, "/api/incidents/*/unblock").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PATCH, "/api/incidents/*/perma-block").hasRole("ADMIN")
                         .requestMatchers("/actuator/**").hasRole("ADMIN")
                         // Everything else under /api/incidents just needs
                         // a valid token, either role.

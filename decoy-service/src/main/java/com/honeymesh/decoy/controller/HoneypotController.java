@@ -1,9 +1,11 @@
 package com.honeymesh.decoy.controller;
 
 import com.honeymesh.decoy.config.RabbitConfig;
+import com.honeymesh.decoy.dto.RequestForensics;
 import com.honeymesh.decoy.entity.Decoy;
 import com.honeymesh.decoy.event.TelemetryEvent;
 import com.honeymesh.decoy.service.DecoyService;
+import com.honeymesh.decoy.service.RequestForensicsService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -13,6 +15,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.Instant;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 
@@ -48,11 +52,14 @@ public class HoneypotController {
     private final DecoyService decoyService;
     private final RabbitTemplate rabbitTemplate;
     private final StringRedisTemplate redisTemplate;
+    private final RequestForensicsService forensicsService;
 
-    public HoneypotController(DecoyService decoyService, RabbitTemplate rabbitTemplate, StringRedisTemplate redisTemplate) {
+    public HoneypotController(DecoyService decoyService, RabbitTemplate rabbitTemplate,
+                               StringRedisTemplate redisTemplate, RequestForensicsService forensicsService) {
         this.decoyService = decoyService;
         this.rabbitTemplate = rabbitTemplate;
         this.redisTemplate = redisTemplate;
+        this.forensicsService = forensicsService;
     }
 
     @RequestMapping("/**")
@@ -73,6 +80,7 @@ public class HoneypotController {
                 .filter(Decoy::isEnabled)
                 .map(decoy -> {
                     publishHit(decoy, request);
+                    captureForensics(request, clientIp);
                     return ResponseEntity.ok(Map.of("status", "ok"));
                 })
                 .orElseGet(() -> ResponseEntity.notFound().build());
@@ -87,6 +95,20 @@ public class HoneypotController {
                 Instant.now()
         );
         rabbitTemplate.convertAndSend(RabbitConfig.EXCHANGE, RabbitConfig.TELEMETRY_ROUTING_KEY, event);
+    }
+
+    // Full request detail for the analyst view — separate from the
+    // TelemetryEvent published above on purpose (see RequestForensics'
+    // javadoc: this stays local to decoy-service via Redis instead of
+    // being threaded through two more event contracts downstream).
+    private void captureForensics(HttpServletRequest request, String clientIp) {
+        Map<String, String> headers = new LinkedHashMap<>();
+        Collections.list(request.getHeaderNames()).forEach(name -> headers.put(name, request.getHeader(name)));
+
+        String queryString = request.getQueryString();
+        String uri = request.getRequestURI() + (queryString != null ? "?" + queryString : "");
+
+        forensicsService.save(new RequestForensics(clientIp, request.getMethod(), uri, headers, Instant.now()));
     }
 
     // Requests arrive here already proxied through the gateway, so
