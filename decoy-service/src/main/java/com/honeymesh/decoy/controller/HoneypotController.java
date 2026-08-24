@@ -6,6 +6,8 @@ import com.honeymesh.decoy.event.TelemetryEvent;
 import com.honeymesh.decoy.service.DecoyService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -36,12 +38,21 @@ public class HoneypotController {
     private static final Set<String> RESERVED_PREFIXES =
             Set.of("/api/decoy/admin", "/api/decoy/ping", "/actuator", "/error");
 
+    // Same key format threat-engine-service's BlocklistService writes
+    // (honeymesh:block:<ip>). Deliberately reading the SAME Redis keys
+    // instead of calling threat-engine-service's API — one shared piece
+    // of fast state, no new service-to-service HTTP call, no new failure
+    // mode if that service is briefly slow.
+    private static final String BLOCK_KEY_PREFIX = "honeymesh:block:";
+
     private final DecoyService decoyService;
     private final RabbitTemplate rabbitTemplate;
+    private final StringRedisTemplate redisTemplate;
 
-    public HoneypotController(DecoyService decoyService, RabbitTemplate rabbitTemplate) {
+    public HoneypotController(DecoyService decoyService, RabbitTemplate rabbitTemplate, StringRedisTemplate redisTemplate) {
         this.decoyService = decoyService;
         this.rabbitTemplate = rabbitTemplate;
+        this.redisTemplate = redisTemplate;
     }
 
     @RequestMapping("/**")
@@ -50,6 +61,12 @@ public class HoneypotController {
 
         if (RESERVED_PREFIXES.stream().anyMatch(path::startsWith)) {
             return ResponseEntity.notFound().build();
+        }
+
+        String clientIp = resolveClientIp(request);
+        if (Boolean.TRUE.equals(redisTemplate.hasKey(BLOCK_KEY_PREFIX + clientIp))) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("status", "blocked", "reason", "This source is temporarily blocked."));
         }
 
         return decoyService.findByEndpointPath(path)
