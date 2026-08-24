@@ -4,27 +4,22 @@
 #   docker compose up -d
 #   bash scripts/verify.sh
 #
-# Extend this as real features land — e.g. once Mahim's decoy admin CRUD
-# exists, add a check that creates a decoy and reads it back; once Alfi's
-# JWT login exists, add a check that a protected endpoint 401s without a
-# token. Keep it growing alongside the codebase, don't let it go stale.
+# Note on section 8: it deliberately triggers a real CRITICAL threat
+# escalation and a real IP block as part of verifying enforcement works.
+# If you re-run this within ~5 minutes of a previous run, you may see
+# your test IP already blocked from the start — that's not a failure,
+# it's proof the block persisted across the run. The checks are written
+# to treat "already blocked" as a pass, not just "became blocked."
 #
 # Requires: docker, curl. Mac/Linux, or WSL/Git Bash on Windows.
+# PowerShell equivalent: scripts/verify.ps1
 
 set -uo pipefail
 
 PASS=0
 FAIL=0
 
-DOCKER="docker"
-if ! docker info >/dev/null 2>&1; then
-  if command -v powershell.exe >/dev/null 2>&1; then
-    DOCKER="powershell.exe -Command docker"
-  fi
-fi
-
 check() {
-
   local desc="$1"
   local result="$2" # 0 = pass, anything else = fail
   if [ "$result" -eq 0 ]; then
@@ -52,7 +47,7 @@ for path in decoy threat incidents; do
 done
 
 echo
-echo "== 3. Decoy admin CRUD + honeypot catch-all + full event pipeline =="
+echo "== 3. Decoy admin CRUD + honeypot catch-all + basic event pipeline =="
 DECOY_PATH="/api/admin/verify-$(date +%s)"
 
 CREATE_RESPONSE=$(curl -sf -X POST "http://localhost:8080/api/decoy/admin" \
@@ -82,8 +77,8 @@ check "cleaned up test decoy" $?
 
 echo
 echo "== 4. Postgres schemas =="
-SCHEMAS=$($DOCKER exec honeymesh-postgres psql -U honeymesh -d honeymesh -tAc \
-  "SELECT schema_name FROM information_schema.schemata;" 2>/dev/null | tr -d '\r')
+SCHEMAS=$(docker exec honeymesh-postgres psql -U honeymesh -d honeymesh -tAc \
+  "SELECT schema_name FROM information_schema.schemata;" 2>/dev/null)
 for s in decoy threat_engine incident; do
   echo "$SCHEMAS" | grep -q "^${s}$"
   check "schema '$s' exists" $?
@@ -91,10 +86,8 @@ done
 
 echo
 echo "== 5. Redis reachable =="
-$DOCKER exec honeymesh-redis redis-cli ping 2>/dev/null | tr -d '\r' | grep -q PONG
+docker exec honeymesh-redis redis-cli ping 2>/dev/null | grep -q PONG
 check "redis responds to PING" $?
-
-
 
 echo
 echo "== 6. RabbitMQ management API reachable =="
@@ -113,25 +106,75 @@ LOGIN_RESPONSE=$(curl -sf -X POST "http://localhost:8080/api/auth/login" \
   -d '{"username":"analyst","password":"analyst123"}')
 check "analyst can log in and receive a token" $?
 
-TOKEN=$(echo "$LOGIN_RESPONSE" | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
-[ -n "$TOKEN" ]
+ANALYST_TOKEN=$(echo "$LOGIN_RESPONSE" | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
+[ -n "$ANALYST_TOKEN" ]
 check "JWT token parsed from login response" $?
 
-curl -sf -H "Authorization: Bearer ${TOKEN}" "http://localhost:8080/api/incidents" > /dev/null
+curl -sf -H "Authorization: Bearer ${ANALYST_TOKEN}" "http://localhost:8080/api/incidents" > /dev/null
 check "GET /api/incidents with a valid analyst token succeeds" $?
 
 ASSIGN_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X PATCH \
-  -H "Authorization: Bearer ${TOKEN}" -H "Content-Type: application/json" \
+  -H "Authorization: Bearer ${ANALYST_TOKEN}" -H "Content-Type: application/json" \
   -d '{"analyst":"analyst","version":0}' \
   "http://localhost:8080/api/incidents/999999/assign")
 [ "$ASSIGN_STATUS" = "403" ] || [ "$ASSIGN_STATUS" = "401" ]
 check "analyst (non-admin) token is blocked on the admin-only assign endpoint (got $ASSIGN_STATUS)" $?
+
+echo
+echo "== 8. Full chain: escalation -> enforcement -> auto-incident =="
+echo "   (this is the actual end-to-end path your demo relies on)"
+
+ADMIN_LOGIN=$(curl -sf -X POST "http://localhost:8080/api/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"admin123"}')
+ADMIN_TOKEN=$(echo "$ADMIN_LOGIN" | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
+[ -n "$ADMIN_TOKEN" ]
+check "admin login succeeds (needed to read incidents below)" $?
+
+CHAIN_PATH="/api/admin/verify-chain-$(date +%s)"
+CHAIN_DECOY=$(curl -sf -X POST "http://localhost:8080/api/decoy/admin" \
+  -H "Content-Type: application/json" \
+  -d "{\"name\":\"verify chain decoy\",\"endpointPath\":\"${CHAIN_PATH}\",\"riskLevel\":\"CRITICAL\"}")
+CHAIN_DECOY_ID=$(echo "$CHAIN_DECOY" | grep -o '"id":[0-9]*' | grep -o '[0-9]*')
+[ -n "$CHAIN_DECOY_ID" ]
+check "created a CRITICAL-risk decoy for the escalation test (id=$CHAIN_DECOY_ID)" $?
+
+# 6 hits: CRITICAL base (60) + 5-or-more-hits bonus (20) = 80, over the
+# CRITICAL threshold (75). One hit of margin above the minimum 5.
+for i in 1 2 3 4 5 6; do
+  curl -s "http://localhost:8080${CHAIN_PATH}" > /dev/null
+done
+check "fired 6 rapid hits at the CRITICAL decoy" 0
+
+sleep 3 # let the async chain (correlate -> score -> maybe block -> publish) finish
+
+ASSESSMENT=$(curl -sf "http://localhost:8080/api/threat/last-assessment-event")
+echo "$ASSESSMENT" | grep -q '"level":"CRITICAL"'
+check "threat assessment escalated to CRITICAL (score/level reflect the 6 hits)" $?
+
+CHAIN_IP=$(echo "$ASSESSMENT" | grep -o '"sourceIp":"[^"]*"' | cut -d'"' -f4)
+[ -n "$CHAIN_IP" ]
+check "captured the source IP that should now be blocked ($CHAIN_IP)" $?
+
+BLOCK_STATUS_RESPONSE=$(curl -sf "http://localhost:8080/api/threat/blocklist/${CHAIN_IP}")
+echo "$BLOCK_STATUS_RESPONSE" | grep -q '"blocked":true'
+check "threat-engine confirms $CHAIN_IP is blocked" $?
+
+ENFORCED_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:8080${CHAIN_PATH}")
+[ "$ENFORCED_STATUS" = "403" ]
+check "a further hit from the blocked IP is actually rejected with 403 (got $ENFORCED_STATUS)" $?
+
+INCIDENTS=$(curl -sf -H "Authorization: Bearer ${ADMIN_TOKEN}" "http://localhost:8080/api/incidents")
+echo "$INCIDENTS" | grep -q "\"sourceIp\":\"${CHAIN_IP}\""
+check "an incident was auto-created for $CHAIN_IP" $?
+
 echo
 echo "-----------------------------------"
 echo "Passed: $PASS   Failed: $FAIL"
 echo "-----------------------------------"
 echo "Not automated here — check manually:"
-echo "  websocat ws://localhost:8080/ws/alerts   (should get a heartbeat every 10s)"
+echo "  websocat ws://localhost:8080/ws/alerts   (should get a heartbeat every 10s,"
+echo "  plus an 'incident.updated' message right after section 8 runs)"
 
 if [ "$FAIL" -gt 0 ]; then
   exit 1
