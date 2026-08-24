@@ -98,14 +98,18 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/honeymesh?currentSchema=incident
       SPRING_DATASOURCE_USERNAME: honeymesh
       SPRING_DATASOURCE_PASSWORD: honeymesh_dev_pw
       SPRING_DATA_REDIS_HOST: redis
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_USERNAME: honeymesh
+      SPRING_RABBITMQ_PASSWORD: honeymesh_dev_pw
     ports:
       - "8083:8083"
-
   gateway:
     build: ./gateway
     container_name: honeymesh-gateway

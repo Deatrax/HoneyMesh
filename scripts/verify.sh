@@ -102,6 +102,31 @@ curl -sf -u honeymesh:honeymesh_dev_pw "http://localhost:15672/api/overview" > /
 check "rabbitmq management API reachable" $?
 
 echo
+echo "== 7. Incident Service auth (JWT) =="
+
+STATUS=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:8080/api/incidents")
+[ "$STATUS" = "401" ]
+check "GET /api/incidents without a token returns 401 (got $STATUS)" $?
+
+LOGIN_RESPONSE=$(curl -sf -X POST "http://localhost:8080/api/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{"username":"analyst","password":"analyst123"}')
+check "analyst can log in and receive a token" $?
+
+TOKEN=$(echo "$LOGIN_RESPONSE" | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
+[ -n "$TOKEN" ]
+check "JWT token parsed from login response" $?
+
+curl -sf -H "Authorization: Bearer ${TOKEN}" "http://localhost:8080/api/incidents" > /dev/null
+check "GET /api/incidents with a valid analyst token succeeds" $?
+
+ASSIGN_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X PATCH \
+  -H "Authorization: Bearer ${TOKEN}" -H "Content-Type: application/json" \
+  -d '{"analyst":"analyst","version":0}' \
+  "http://localhost:8080/api/incidents/999999/assign")
+[ "$ASSIGN_STATUS" = "403" ] || [ "$ASSIGN_STATUS" = "401" ]
+check "analyst (non-admin) token is blocked on the admin-only assign endpoint (got $ASSIGN_STATUS)" $?
+echo
 echo "-----------------------------------"
 echo "Passed: $PASS   Failed: $FAIL"
 echo "-----------------------------------"
