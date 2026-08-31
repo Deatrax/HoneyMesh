@@ -8,3 +8,5 @@ out/
 .env
 *.log
 gitignored/
+documents
+dummy-website/node_modules/

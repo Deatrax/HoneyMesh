@@ -8,9 +8,14 @@ import java.time.Instant;
  * "why isn't this a shared library?"). Services agree on JSON shape, not on
  * Java class identity.
  */
+
+import com.honeymesh.decoy.entity.RiskLevel;
+
+
 public record TelemetryEvent(
         String decoyId,
         String sourceIp,
         String endpoint,
+        RiskLevel riskLevel,
         Instant occurredAt
 ) {}
