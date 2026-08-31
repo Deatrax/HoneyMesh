@@ -11,10 +11,6 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 
-/**
- * Phase 8: Idempotency Service for incoming TelemetryEvent messages.
- * Uses atomic SET-if-absent (SET NX) in Redis to prevent duplicate event processing across replicas.
- */
 @Service
 public class TelemetryIdempotencyService {
 
@@ -33,10 +29,6 @@ public class TelemetryIdempotencyService {
         this.redisTemplate = redisTemplate;
     }
 
-    /**
-     * Attempts to atomically claim an event for processing using Redis SET NX.
-     * @return true if claim acquired (first processing attempt), false if already claimed or completed.
-     */
     public boolean tryClaim(TelemetryEvent event) {
         if (event == null) {
             return false;
@@ -53,9 +45,6 @@ public class TelemetryIdempotencyService {
         return acquired;
     }
 
-    /**
-     * Marks an event processing attempt as successfully completed with a 24-hour retention TTL.
-     */
     public void markCompleted(TelemetryEvent event) {
         if (event == null) {
             return;
@@ -66,7 +55,8 @@ public class TelemetryIdempotencyService {
     }
 
     /**
-     * Releases an in-flight processing claim when processing fails with an exception,
+     * Releases an in-flight processing claim when processing fails with an
+     * exception,
      * allowing RabbitMQ redelivery to re-attempt processing.
      */
     public void releaseClaim(TelemetryEvent event) {
@@ -79,7 +69,8 @@ public class TelemetryIdempotencyService {
     }
 
     /**
-     * Generates a deterministic SHA-256 fingerprint from all identifying fields of TelemetryEvent.
+     * Generates a deterministic SHA-256 fingerprint from all identifying fields of
+     * TelemetryEvent.
      */
     public String generateFingerprint(TelemetryEvent event) {
         if (event == null) {
@@ -90,8 +81,7 @@ public class TelemetryIdempotencyService {
                 event.sourceIp() != null ? event.sourceIp() : "",
                 event.endpoint() != null ? event.endpoint() : "",
                 event.riskLevel() != null ? event.riskLevel().name() : "",
-                event.occurredAt() != null ? event.occurredAt().toString() : ""
-        );
+                event.occurredAt() != null ? event.occurredAt().toString() : "");
 
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
@@ -111,12 +101,14 @@ public class TelemetryIdempotencyService {
     }
 
     public String getStatus(TelemetryEvent event) {
-        if (event == null) return null;
+        if (event == null)
+            return null;
         return redisTemplate.opsForValue().get(getKey(generateFingerprint(event)));
     }
 
     public Long getTtlSeconds(TelemetryEvent event) {
-        if (event == null) return -2L;
+        if (event == null)
+            return -2L;
         return redisTemplate.getExpire(getKey(generateFingerprint(event)));
     }
 }

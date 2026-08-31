@@ -20,8 +20,8 @@ public class CorrelationService {
     private static final Logger log = LoggerFactory.getLogger(CorrelationService.class);
 
     private static final String KEY_PREFIX = "honeymesh:correlation:source:";
-    private static final long WINDOW_DURATION_MS = 5 * 60 * 1000L; // 5-minute rolling window in milliseconds
-    private static final Duration KEY_TTL = Duration.ofMinutes(10); // 10-minute expiry for inactive source IP keys
+    private static final long WINDOW_DURATION_MS = 5 * 60 * 1000L;
+    private static final Duration KEY_TTL = Duration.ofMinutes(10);
 
     private final StringRedisTemplate redisTemplate;
 
@@ -29,13 +29,6 @@ public class CorrelationService {
         this.redisTemplate = redisTemplate;
     }
 
-    /**
-     * Correlates an incoming TelemetryEvent for a source IP by:
-     * 1. Adding the event to the source IP's Redis sorted set (ZSET) with timestamp as score.
-     * 2. Removing entries older than 5 minutes from the sorted set.
-     * 3. Reading the remaining active entries to compute the CorrelationSnapshot.
-     * 4. Refreshing the key's TTL to 10 minutes so inactive keys expire automatically.
-     */
     public CorrelationSnapshot correlate(TelemetryEvent event) {
         if (event == null || event.sourceIp() == null || event.sourceIp().isBlank()) {
             return new CorrelationSnapshot(0, 0, RiskLevel.LOW);
@@ -50,24 +43,21 @@ public class CorrelationService {
         RiskLevel riskLevel = event.riskLevel() != null ? event.riskLevel() : RiskLevel.LOW;
         String decoyId = event.decoyId() != null ? event.decoyId() : "unknown-decoy";
 
-        // Deterministic member format: <decoyId>:<riskLevel>:<eventTimeMs>:<uniqueSuffix>
-        // The unique UUID suffix guarantees member uniqueness in the Redis ZSET if multiple hits occur at the exact same millisecond.
-        String member = decoyId + ":" + riskLevel.name() + ":" + eventTimeMs + ":" + UUID.randomUUID().toString().substring(0, 8);
+        String member = decoyId + ":" + riskLevel.name() + ":" + eventTimeMs + ":"
+                + UUID.randomUUID().toString().substring(0, 8);
 
-        // 1. Add event member to Redis ZSET with timestamp score
         redisTemplate.opsForZSet().add(redisKey, member, (double) eventTimeMs);
 
-        // 2. Remove entries older than 5 minutes (score strictly less than windowStartMs)
         long windowStartMs = eventTimeMs - WINDOW_DURATION_MS;
         redisTemplate.opsForZSet().removeRangeByScore(redisKey, 0, (double) (windowStartMs - 1));
 
-        // 3. Read remaining active members within the 5-minute window
-        Set<String> remainingMembers = redisTemplate.opsForZSet().rangeByScore(redisKey, (double) windowStartMs, Double.MAX_VALUE);
+        // Active members within 5 min window
+        Set<String> remainingMembers = redisTemplate.opsForZSet().rangeByScore(redisKey, (double) windowStartMs,
+                Double.MAX_VALUE);
 
-        // 4. Calculate correlation metrics
         CorrelationSnapshot snapshot = computeSnapshotFromMembers(remainingMembers);
 
-        // 5. Refresh TTL so inactive keys auto-expire after 10 minutes
+        // Refresh TTL
         redisTemplate.expire(redisKey, KEY_TTL);
 
         log.debug("Correlated source IP {}: recentHits={}, distinctDecoys={}, highestRisk={}",
@@ -76,9 +66,6 @@ public class CorrelationService {
         return snapshot;
     }
 
-    /**
-     * Reads the current correlation snapshot for a given source IP without inserting a new event.
-     */
     public CorrelationSnapshot getCorrelationSnapshot(String sourceIp) {
         if (sourceIp == null || sourceIp.isBlank()) {
             return new CorrelationSnapshot(0, 0, RiskLevel.LOW);
@@ -87,10 +74,11 @@ public class CorrelationService {
         long nowMs = System.currentTimeMillis();
         long windowStartMs = nowMs - WINDOW_DURATION_MS;
 
-        // Prune stale entries older than 5 minutes
+        // prune old/stale entries
         redisTemplate.opsForZSet().removeRangeByScore(redisKey, 0, (double) (windowStartMs - 1));
 
-        Set<String> remainingMembers = redisTemplate.opsForZSet().rangeByScore(redisKey, (double) windowStartMs, Double.MAX_VALUE);
+        Set<String> remainingMembers = redisTemplate.opsForZSet().rangeByScore(redisKey, (double) windowStartMs,
+                Double.MAX_VALUE);
 
         return computeSnapshotFromMembers(remainingMembers);
     }
