@@ -89,7 +89,6 @@ class ThreatScoringServiceTest {
 
         ThreatAssessment assessment = scoringService.assess(snapshot);
 
-        // Raw score: 60 (CRITICAL) + 20 (5+ hits) + 20 (3+ decoys) = 100
         assertThat(assessment.score()).isEqualTo(100);
         assertThat(assessment.level()).isEqualTo(ThreatLevel.CRITICAL);
         assertThat(assessment.reasons()).hasSize(3);
@@ -98,7 +97,6 @@ class ThreatScoringServiceTest {
     @Test
     @DisplayName("Score capping test: Raw score > 100 is capped at 100")
     void testRawScoreExceeding100IsCapped() {
-        // Hypothetical huge numbers
         CorrelationSnapshot snapshot = new CorrelationSnapshot(100, 50, RiskLevel.CRITICAL);
 
         ThreatAssessment assessment = scoringService.assess(snapshot);

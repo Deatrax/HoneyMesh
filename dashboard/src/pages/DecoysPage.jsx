@@ -15,11 +15,6 @@ export default function DecoysPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
-  // decoy-service's /api/decoy/admin/** now requires a token (see
-  // decoy-service's new SecurityConfig.java) — authFetch attaches the
-  // logged-in analyst's Bearer token the same way IncidentsPage.jsx
-  // already does. The honeypot paths themselves (what HoneypotController
-  // handles) stay public; only this admin management surface changed.
   const fetchDecoys = useCallback(() => {
     setLoading(true)
     authFetch('/api/decoy/admin')

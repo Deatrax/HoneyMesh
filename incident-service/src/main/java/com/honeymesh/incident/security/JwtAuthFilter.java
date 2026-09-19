@@ -15,19 +15,6 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 import java.util.List;
 
-/**
- * Runs once per request, before Spring Security's normal auth checks.
- * Reads "Authorization: Bearer <token>"; if it's a valid JWT, tells
- * Spring Security "this request is authenticated as this user, with
- * these roles" for the rest of the request.
- *
- * If there's no token, or it's invalid/expired, this filter just does
- * nothing and lets the request continue unauthenticated — it's
- * SecurityConfig's authorizeHttpRequests() rules, further down the
- * chain, that actually reject unauthenticated requests to protected
- * paths (and our custom AuthenticationEntryPoint that turns that
- * rejection into a 401, not Spring Security's 403 default).
- */
 public class JwtAuthFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
@@ -58,9 +45,6 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 var authentication = new UsernamePasswordAuthenticationToken(username, null, authorities);
                 SecurityContextHolder.getContext().setAuthentication(authentication);
             } catch (JwtException | IllegalArgumentException invalidToken) {
-                // Bad/expired/tampered token: clear anything that might
-                // already be set and leave the request unauthenticated.
-                // authorizeHttpRequests() decides what happens next.
                 SecurityContextHolder.clearContext();
             }
         }

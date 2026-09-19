@@ -134,7 +134,6 @@ class ThreatControllerPhase6Test {
     @Test
     @DisplayName("Case 7 & 8: GET /api/threat/block/{sourceIp} returns blocked and non-blocked status")
     void testBlockStatus() {
-        // Blocked source
         when(blocklistService.isBlocked("203.0.113.7")).thenReturn(true);
         when(blocklistService.getRemainingTtlSeconds("203.0.113.7")).thenReturn(241L);
 
@@ -142,7 +141,6 @@ class ThreatControllerPhase6Test {
         assertThat(respBlocked.blocked()).isTrue();
         assertThat(respBlocked.remainingTtlSeconds()).isEqualTo(241L);
 
-        // Non-blocked source
         when(blocklistService.isBlocked("192.168.1.1")).thenReturn(false);
         when(blocklistService.getRemainingTtlSeconds("192.168.1.1")).thenReturn(0L);
 

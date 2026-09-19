@@ -13,8 +13,6 @@ import java.util.concurrent.ConcurrentHashMap;
 @Component
 public class AlertWebSocketHandler extends TextWebSocketHandler {
 
-    // Sessions pinned to THIS replica only — the reason Redis Pub/Sub fan-out
-    // matters once you run more than one incident-service instance.
     private final Set<WebSocketSession> sessions = ConcurrentHashMap.newKeySet();
 
     @Override
@@ -34,7 +32,6 @@ public class AlertWebSocketHandler extends TextWebSocketHandler {
                     session.sendMessage(new TextMessage(message));
                 }
             } catch (IOException e) {
-                // best-effort broadcast; a dead session will be cleaned up on close
             }
         }
     }

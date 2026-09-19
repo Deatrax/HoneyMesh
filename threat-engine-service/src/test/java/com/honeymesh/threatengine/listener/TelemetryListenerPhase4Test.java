@@ -156,12 +156,10 @@ class TelemetryListenerPhase4Test {
         verify(threatAssessmentPublisher).publish(captor.capture());
 
         ThreatAssessmentEvent published = captor.getValue();
-        // Triggering event fields
         assertThat(published.sourceIp()).isEqualTo("10.0.5.99");
         assertThat(published.triggeringDecoyId()).isEqualTo("decoy-77");
         assertThat(published.triggeringEndpoint()).isEqualTo("/api/v1/auth");
 
-        // Correlation metrics
         assertThat(published.recentHitCount()).isEqualTo(4);
         assertThat(published.distinctDecoyCount()).isEqualTo(2);
     }

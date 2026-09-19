@@ -1,16 +1,3 @@
-# HoneyMesh PowerShell Verification Script
-# Consolidated from verify.ps1 + verify_phase5.ps1 + verify_phase6.ps1 into
-# one canonical script that mirrors scripts/verify.sh section-for-section.
-# Run from the repo root, with the stack already up:
-#   docker compose up -d
-#   pwsh scripts/verify.ps1   (or: powershell scripts/verify.ps1)
-#
-# Note on section 8: it deliberately triggers a real CRITICAL threat
-# escalation and a real IP block as part of verifying enforcement works.
-# If you re-run this within ~5 minutes of a previous run, you may see
-# your test IP already blocked from the start — that's not a failure,
-# it's proof the block persisted across the run.
-
 $PASS = 0
 $FAIL = 0
 
@@ -24,8 +11,6 @@ function Check($desc, $result) {
     }
 }
 
-# Returns the HTTP status code from any request, success or failure,
-# without PowerShell throwing away the code on a non-2xx response.
 function Get-StatusCode($uri, $method = "GET", $headers = @{}, $body = $null) {
     try {
         $params = @{ Uri = $uri; Method = $method; Headers = $headers; TimeoutSec = 5 }
@@ -39,8 +24,6 @@ function Get-StatusCode($uri, $method = "GET", $headers = @{}, $body = $null) {
 }
 
 Write-Host "== 1. Direct service health (Actuator) =="
-# Note: "gateway:8080" is no longer a direct connection — that port is
-# now owned by load-balancer, which round-robins to gateway-1/gateway-2.
 $services = @("decoy-service:8081", "threat-engine-service:8082", "incident-service:8083", "gateway:8080")
 foreach ($svc in $services) {
     $parts = $svc.Split(":")
@@ -65,9 +48,6 @@ foreach ($p in @("decoy", "threat", "incidents")) {
 Write-Host "`n== 3. Decoy admin CRUD + honeypot catch-all + basic event pipeline =="
 $decoyPath = "/api/admin/verify-$(Get-Date -UFormat %s)"
 try {
-    # /api/decoy/admin (and all of /api/threat/**) now require a token —
-    # decoy-service and threat-engine-service each got their own
-    # SecurityConfig.java, mirroring incident-service's.
     $decoyAdminLogin = Invoke-RestMethod -Uri "http://localhost:8080/api/auth/login" -Method POST -ContentType "application/json" `
         -Body (@{ username = "admin"; password = "admin123" } | ConvertTo-Json)
     $decoyAdminToken = $decoyAdminLogin.token
@@ -150,8 +130,6 @@ try {
     $chainDecoyId = $chainDecoy.id
     Check "created a CRITICAL-risk decoy for the escalation test (id=$chainDecoyId)" ($null -ne $chainDecoyId)
 
-    # 6 hits: CRITICAL base (60) + 5-or-more-hits bonus (20) = 80, over the
-    # CRITICAL threshold (75). One hit of margin above the minimum 5.
     for ($i = 0; $i -lt 6; $i++) {
         try { Invoke-RestMethod -Uri "http://localhost:8080$chainPath" -TimeoutSec 5 | Out-Null } catch {}
     }

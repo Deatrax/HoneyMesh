@@ -72,7 +72,6 @@ export default function LoginPage() {
         </button>
       </form>
 
-      {/* Demo-only convenience — remove this hint before any real deployment. */}
       <p style={{ marginTop: '1.5rem', fontSize: '0.8rem', color: '#888' }}>
         Demo accounts — admin / admin123 (full access) or analyst / analyst123 (view, notes, status).
       </p>

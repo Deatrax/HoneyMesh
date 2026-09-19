@@ -12,10 +12,6 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
-// Business logic lives here, not in the controller — this is the
-// controller/service/repository layering from lecture, and it's also just
-// the right place for "reject duplicate endpoint paths" to live, since
-// that's a rule, not plumbing.
 @Service
 public class DecoyService {
 

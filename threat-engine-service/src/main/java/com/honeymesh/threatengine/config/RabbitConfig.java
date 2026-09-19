@@ -46,14 +46,6 @@ public class RabbitConfig {
     }
 
 
-    /**
-     * TypePrecedence.INFERRED is the important line in this whole file.
-     * Without it, this converter trusts the producer's __TypeId__ header, which
-     * names decoy-service's class (com.honeymesh.decoy.event.TelemetryEvent) —
-     * a class that doesn't exist in THIS service's classpath. INFERRED tells it
-     * to trust the @RabbitListener method's declared parameter type instead.
-     * This is the standard fix for cross-service JSON messaging with Jackson2JsonMessageConverter.
-     */
     @Bean
     public MessageConverter jsonMessageConverter() {
         Jackson2JsonMessageConverter converter = new Jackson2JsonMessageConverter();

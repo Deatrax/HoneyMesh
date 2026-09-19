@@ -5,9 +5,6 @@ import com.honeymesh.decoy.entity.RiskLevel;
 
 import java.time.Instant;
 
-// What the admin API returns. Separate from the entity so React never has
-// to know or care about JPA internals, and so adding an internal-only field
-// to Decoy later doesn't automatically leak it over the API.
 public record DecoyResponse(
         Long id,
         String name,

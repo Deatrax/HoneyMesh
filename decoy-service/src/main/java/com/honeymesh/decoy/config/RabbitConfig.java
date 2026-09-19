@@ -9,15 +9,6 @@ import org.springframework.amqp.support.converter.MessageConverter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-/**
- * Topology is declared on the producer side here (and duplicated in
- * threat-engine-service). Declarations are idempotent in RabbitMQ, so having
- * both services declare the same exchange/queue/binding is harmless and avoids
- * "queue doesn't exist yet" races depending on which service starts first.
- *
- * NOTE for Day 2: this is a *durable* queue with no dead-letter-exchange yet.
- * Retry/DLQ wiring is intentionally deferred — see README.
- */
 @Configuration
 public class RabbitConfig {
 

@@ -37,9 +37,6 @@ public class Incident {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    // The attacker. This is the field we correlate on: as long as an
-    // incident for this IP is still open (not RESOLVED), new assessments
-    // update it instead of spawning a fresh incident for every hit.
     @Column(name = "source_ip", nullable = false)
     private String sourceIp;
 
@@ -52,18 +49,10 @@ public class Incident {
     @Column(nullable = false)
     private int score;
 
-    // We reuse Threat Engine's own ThreatLevel enum here instead of
-    // inventing a second one — it's the same concept (how bad is this),
-    // so there's no reason to have two enums that must always be kept in
-    // sync by hand.
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private ThreatLevel level;
 
-    // @ElementCollection makes Hibernate create and manage a second table
-    // ("incident_reasons") automatically — one row per reason string,
-    // linked back to this incident by incident_id. We just work with a
-    // plain List<String> in Java; Hibernate handles the join table.
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "incident_reasons", joinColumns = @JoinColumn(name = "incident_id"))
     @Column(name = "reason", length = 500)
@@ -89,10 +78,6 @@ public class Incident {
     @Column(name = "assigned_analyst")
     private String assignedAnalyst;
 
-    // Traceability only — "which assessment most recently touched this
-    // incident". This is NOT the idempotency guard; that's the separate
-    // ProcessedAssessment table, which stops the exact same RabbitMQ
-    // message from being processed twice.
     @Column(name = "last_assessment_id")
     private String lastAssessmentId;
 
@@ -102,11 +87,6 @@ public class Incident {
     @Column(name = "updated_at")
     private Instant updatedAt;
 
-    // Optimistic locking. Hibernate stamps this 0 on insert and bumps it
-    // by 1 on every successful update, automatically — we never set it
-    // ourselves. See IncidentService.checkVersion()/flushOrConflict() for
-    // how it's actually used to reject stale writes with a 409 instead of
-    // silently overwriting someone else's change.
     @Version
     private Long version;
 }

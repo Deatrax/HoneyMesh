@@ -17,11 +17,6 @@ import lombok.Setter;
 
 import java.time.Instant;
 
-// One row per event in an incident's history — this doubles as both the
-// "notes" feature and the "audit history" requirement, instead of being
-// two separate tables. author = "system" for automatic entries (created,
-// status changed, assigned), or the logged-in analyst's username for a
-// manual note they typed.
 @Entity
 @Table(name = "incident_activities")
 @Getter

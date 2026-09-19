@@ -19,7 +19,6 @@ export default function ThreatsPage() {
   const [error, setError] = useState(null)
   const [detailLoading, setDetailLoading] = useState(false)
 
-  // Ref to prevent overlapping polling requests
   const isFetchingRef = useRef(false)
 
   const fetchRecentAssessments = useCallback(async (isInitial = false) => {
@@ -41,7 +40,6 @@ export default function ThreatsPage() {
     }
   }, [authFetch])
 
-  // Auto-refresh every 5 seconds + cleanup timer on component unmount
   useEffect(() => {
     fetchRecentAssessments(true)
 
@@ -49,11 +47,9 @@ export default function ThreatsPage() {
       fetchRecentAssessments(false)
     }, 5000)
 
-    // Cleanup interval timer on component unmount
     return () => clearInterval(intervalId)
   }, [fetchRecentAssessments])
 
-  // Fetch correlation and block status when an assessment is selected
   useEffect(() => {
     if (!selectedAssessment?.sourceIp) {
       setSourceCorrelation(null)
@@ -91,7 +87,6 @@ export default function ThreatsPage() {
     }
   }, [selectedAssessment, authFetch])
 
-  // Summary card metrics derived strictly from loaded data
   const totalCount = assessments.length
   const criticalCount = assessments.filter((a) => a.level === 'CRITICAL').length
   const blockedCount = assessments.filter((a) => a.blocked).length
@@ -143,7 +138,6 @@ export default function ThreatsPage() {
         </button>
       </div>
 
-      {/* Top Summary Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', marginBottom: '2rem' }}>
         <div style={{ padding: '1rem', border: '1px solid #e0e0e0', borderRadius: '6px', backgroundColor: '#fafafa' }}>
           <div style={{ fontSize: '0.85rem', color: '#666', marginBottom: '0.25rem' }}>Recent Assessments</div>
@@ -163,7 +157,6 @@ export default function ThreatsPage() {
         </div>
       </div>
 
-      {/* Main Content Area */}
       {loading ? (
         <p>Loading threat assessments...</p>
       ) : error ? (
@@ -186,7 +179,6 @@ export default function ThreatsPage() {
         </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: selectedAssessment ? '1fr 1fr' : '1fr', gap: '1.5rem' }}>
-          {/* Assessments List Table */}
           <div>
             <h2 style={{ fontSize: '1.1rem', marginBottom: '0.75rem' }}>Recent Threat Feed (Max 50)</h2>
             <div style={{ overflowX: 'auto', border: '1px solid #e0e0e0', borderRadius: '6px' }}>
@@ -234,7 +226,6 @@ export default function ThreatsPage() {
             </div>
           </div>
 
-          {/* Selected Assessment Detailed View Panel */}
           {selectedAssessment && (
             <div style={{ border: '1px solid #e0e0e0', borderRadius: '6px', padding: '1.25rem', backgroundColor: '#fafafa' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
@@ -288,7 +279,6 @@ export default function ThreatsPage() {
                 </div>
               </div>
 
-              {/* Backend-provided Explainable Reasons */}
               <div style={{ marginBottom: '1.25rem', paddingTop: '1rem', borderTop: '1px solid #e0e0e0' }}>
                 <h3 style={{ fontSize: '0.95rem', margin: '0 0 0.5rem 0', color: '#333' }}>Explainable Reasons</h3>
                 {selectedAssessment.reasons && selectedAssessment.reasons.length > 0 ? (
@@ -304,7 +294,6 @@ export default function ThreatsPage() {
                 )}
               </div>
 
-              {/* Live Source Correlation Details (from /api/threat/source/{sourceIp}) */}
               <div style={{ marginBottom: '1.25rem', paddingTop: '1rem', borderTop: '1px solid #e0e0e0' }}>
                 <h3 style={{ fontSize: '0.95rem', margin: '0 0 0.5rem 0', color: '#333' }}>Source Correlation State</h3>
                 {detailLoading ? (
@@ -321,7 +310,6 @@ export default function ThreatsPage() {
                 )}
               </div>
 
-              {/* Block Status & TTL (from /api/threat/block/{sourceIp}) */}
               <div style={{ paddingTop: '1rem', borderTop: '1px solid #e0e0e0' }}>
                 <h3 style={{ fontSize: '0.95rem', margin: '0 0 0.5rem 0', color: '#333' }}>Block Status</h3>
                 {blockStatus ? (

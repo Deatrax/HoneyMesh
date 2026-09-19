@@ -23,7 +23,6 @@ class CorrelationServiceTest {
     private ZSetOperations<String, String> zSetOperations;
     private CorrelationService correlationService;
 
-    // Simulated Redis ZSET store per key: Map<key, Map<member, score>>
     private Map<String, Map<String, Double>> redisStore;
 
     @BeforeEach
@@ -35,7 +34,6 @@ class CorrelationServiceTest {
 
         when(redisTemplate.opsForZSet()).thenReturn(zSetOperations);
 
-        // Mock ZADD
         when(zSetOperations.add(anyString(), anyString(), anyDouble())).thenAnswer(invocation -> {
             String key = invocation.getArgument(0);
             String member = invocation.getArgument(1);
@@ -44,7 +42,6 @@ class CorrelationServiceTest {
             return true;
         });
 
-        // Mock ZREMRANGEBYSCORE
         when(zSetOperations.removeRangeByScore(anyString(), anyDouble(), anyDouble())).thenAnswer(invocation -> {
             String key = invocation.getArgument(0);
             Double min = invocation.getArgument(1);
@@ -64,7 +61,6 @@ class CorrelationServiceTest {
             return removedCount;
         });
 
-        // Mock ZRANGEBYSCORE
         when(zSetOperations.rangeByScore(anyString(), anyDouble(), anyDouble())).thenAnswer(invocation -> {
             String key = invocation.getArgument(0);
             Double min = invocation.getArgument(1);
@@ -174,7 +170,7 @@ class CorrelationServiceTest {
     @DisplayName("6. Events older than the 5-minute window are excluded")
     void testRollingWindowExclusion() {
         Instant t0 = Instant.parse("2026-08-23T12:00:00Z");
-        Instant t6Min = t0.plus(Duration.ofMinutes(6)); // 6 minutes after t0
+        Instant t6Min = t0.plus(Duration.ofMinutes(6));
 
         TelemetryEvent oldEvent = new TelemetryEvent("decoy-old", "192.168.1.50", "/api/old", RiskLevel.CRITICAL, t0);
         TelemetryEvent newEvent = new TelemetryEvent("decoy-new", "192.168.1.50", "/api/new", RiskLevel.LOW, t6Min);
@@ -182,7 +178,6 @@ class CorrelationServiceTest {
         correlationService.correlate(oldEvent);
         CorrelationSnapshot snapshotAfter6Min = correlationService.correlate(newEvent);
 
-        // The old event (6 minutes ago) should be purged by the 5-minute window
         assertThat(snapshotAfter6Min.recentHitCount()).isEqualTo(1);
         assertThat(snapshotAfter6Min.distinctDecoyCount()).isEqualTo(1);
         assertThat(snapshotAfter6Min.highestRiskLevel()).isEqualTo(RiskLevel.LOW);

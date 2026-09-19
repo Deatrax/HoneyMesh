@@ -1,20 +1,3 @@
-# HoneyMesh — local/dev/demo topology
-# Run:   docker compose up --build
-# Stop:  docker compose down          (add -v to also wipe the postgres volume)
-#
-# Topology:
-#   dashboard --> load-balancer --> {gateway-1, gateway-2} --> {decoy-service, threat-engine-service, incident-service}
-#                                                                    |         postgres / redis / rabbitmq
-#
-# Two networks, not one flat bridge:
-#   edge — the only network the load-balancer and dashboard sit on. Nothing
-#          on this network can reach postgres/redis/rabbitmq/the backend
-#          services directly; the gateways are the sole bridge between edge
-#          and core.
-#   core — postgres, redis, rabbitmq, the 3 backend services, and both
-#          gateways (a gateway needs to be on both networks: it receives
-#          traffic from the edge and forwards it into core).
-
 networks:
   edge:
     driver: bridge
@@ -68,8 +51,8 @@ services:
       RABBITMQ_DEFAULT_USER: honeymesh
       RABBITMQ_DEFAULT_PASS: honeymesh_dev_pw
     ports:
-      - "5672:5672"   # AMQP
-      - "15672:15672" # management UI -> http://localhost:15672
+      - "5672:5672"
+      - "15672:15672"
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 10s
@@ -148,14 +131,6 @@ services:
     ports:
       - "8083:8083"
 
-  # Two Gateway replicas, same image, same routes (RouteConfig.java is
-  # identical on both — Spring Cloud Gateway holds no per-instance state).
-  # Neither is reachable from the host directly ("expose", not "ports") —
-  # load-balancer is the only public entry point on 8080 now. Compose can't
-  # give two containers the same container_name, so these are two explicit
-  # service blocks rather than a --scale'd single one; that also means each
-  # gets its own log stream, which is useful for actually demonstrating
-  # failover live.
   gateway-1:
     build: ./gateway
     container_name: honeymesh-gateway-1
@@ -184,15 +159,6 @@ services:
     expose:
       - "8080"
 
-  # Load balancer: the "React dashboard -> Load Balancer -> Gateway" box
-  # from the original design, actually built now instead of deferred.
-  # Round-robins across gateway-1/gateway-2; if one is down, nginx's
-  # passive health check (max_fails/fail_timeout in load-balancer.conf)
-  # stops sending it traffic within a few failed requests and routes
-  # everything to the survivor — no config reload needed. This container
-  # now owns host port 8080, so every existing curl/script pointed at
-  # localhost:8080 keeps working unchanged; it's just going through nginx
-  # first instead of hitting a gateway container directly.
   load-balancer:
     image: nginx:1.27-alpine
     container_name: honeymesh-load-balancer
@@ -207,12 +173,6 @@ services:
     volumes:
       - ./infra/nginx/load-balancer.conf:/etc/nginx/conf.d/default.conf:ro
 
-  # React dashboard, built and served as static files by nginx (not the
-  # Vite dev server). Its own nginx.conf proxies /api and /ws to the load
-  # balancer server-side, so the browser only ever talks to one origin
-  # (localhost:5173) — same-origin, no CORS config needed anywhere, and
-  # the exact same relative fetch('/api/...') calls the app already makes
-  # work unchanged in both `npm run dev` and this containerized build.
   dashboard:
     build: ./dashboard
     container_name: honeymesh-dashboard

@@ -7,10 +7,6 @@ import com.honeymesh.incident.event.ThreatLevel;
 import java.time.Instant;
 import java.util.List;
 
-// What the REST API returns. Separate from the Incident entity, same
-// reasoning as decoy-service's DecoyResponse: the dashboard shouldn't
-// know or care about JPA internals, and we can change the entity later
-// without automatically changing the API shape.
 public record IncidentResponse(
         Long id,
         String sourceIp,
@@ -27,9 +23,6 @@ public record IncidentResponse(
         String assignedAnalyst,
         Instant createdAt,
         Instant updatedAt,
-        // The frontend must send this back on every assign/status-change
-        // request — that round trip is what makes optimistic locking work
-        // end to end, not just inside the database.
         Long version
 ) {
     public static IncidentResponse from(Incident incident) {

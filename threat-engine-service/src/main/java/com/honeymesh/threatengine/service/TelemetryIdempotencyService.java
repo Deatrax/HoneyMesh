@@ -54,11 +54,6 @@ public class TelemetryIdempotencyService {
         redisTemplate.opsForValue().set(key, STATUS_DONE, COMPLETED_TTL);
     }
 
-    /**
-     * Releases an in-flight processing claim when processing fails with an
-     * exception,
-     * allowing RabbitMQ redelivery to re-attempt processing.
-     */
     public void releaseClaim(TelemetryEvent event) {
         if (event == null) {
             return;
@@ -68,10 +63,6 @@ public class TelemetryIdempotencyService {
         redisTemplate.delete(key);
     }
 
-    /**
-     * Generates a deterministic SHA-256 fingerprint from all identifying fields of
-     * TelemetryEvent.
-     */
     public String generateFingerprint(TelemetryEvent event) {
         if (event == null) {
             return "";

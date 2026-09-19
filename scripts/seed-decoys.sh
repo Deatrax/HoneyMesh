@@ -1,11 +1,4 @@
 #!/usr/bin/env bash
-# Seeds a handful of realistic-looking decoys for local dev/demo.
-# Safe to re-run: a duplicate path just gets skipped (decoy-service's own
-# 409 check), nothing special this script needs to handle.
-#
-# /api/decoy/admin now requires an ADMIN token (decoy-service's new
-# SecurityConfig.java) — log in as the demo admin account first and
-# attach the token to every seed request.
 
 GATEWAY="http://localhost:8080"
 

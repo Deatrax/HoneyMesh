@@ -26,25 +26,13 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-// Business logic lives here, not in the controller or the listener — same
-// controller/service/repository layering DecoyService uses. This is the
-// one class that knows the actual rules: which assessments matter, when
-// to merge vs. create, which status transitions are legal, how
-// optimistic locking gets enforced.
 @Service
 public class IncidentService {
 
     private static final Logger log = LoggerFactory.getLogger(IncidentService.class);
 
-    // Same key format BlocklistService (threat-engine-service) writes and
-    // decoy-service's HoneypotController reads — deliberately shared Redis
-    // state, not a new HTTP call to another service, same reasoning as the
-    // enforcement fix in HoneypotController.
     private static final String BLOCK_KEY_PREFIX = "honeymesh:block:";
 
-    // OPEN -> INVESTIGATING -> CONTAINED -> RESOLVED, plus a shortcut
-    // straight from INVESTIGATING to RESOLVED for false positives.
-    // RESOLVED has no allowed next states — it's terminal.
     private static final Map<IncidentStatus, List<IncidentStatus>> ALLOWED_TRANSITIONS = Map.of(
             IncidentStatus.OPEN, List.of(IncidentStatus.INVESTIGATING),
             IncidentStatus.INVESTIGATING, List.of(IncidentStatus.CONTAINED, IncidentStatus.RESOLVED),
@@ -58,12 +46,6 @@ public class IncidentService {
     private final IncidentBroadcaster broadcaster;
     private final StringRedisTemplate redisTemplate;
 
-    // Only assessments at or above this level open/update an incident.
-    // Threat Engine publishes one for every single decoy hit, so without
-    // this filter every hit would become an incident. Injected via
-    // constructor (same as every other dependency here) rather than a
-    // @Value field, so this class can still be built by hand in a test
-    // without Spring running.
     private final ThreatLevel minLevelForIncident;
 
     public IncidentService(IncidentRepository incidentRepository,
@@ -80,8 +62,6 @@ public class IncidentService {
         this.minLevelForIncident = minLevelForIncident;
     }
 
-    // ---------- Consuming assessments from Threat Engine ----------
-
     @Transactional
     public void handleAssessment(ThreatAssessmentEvent event) {
         if (!claimAssessment(event.assessmentId())) {
@@ -89,8 +69,6 @@ public class IncidentService {
             return;
         }
 
-        // Ordinal comparison relies on ThreatLevel's declared order
-        // (INFORMATIONAL, SUSPICIOUS, HIGH, CRITICAL) — see that enum.
         if (event.level().ordinal() < minLevelForIncident.ordinal()) {
             log.debug("Assessment id={} level={} is below the {} threshold — not opening an incident",
                     event.assessmentId(), event.level(), minLevelForIncident);
@@ -105,11 +83,6 @@ public class IncidentService {
         broadcaster.incidentUpserted(incident);
     }
 
-    // Redis SET-NX is Prince's tool of choice for telemetry idempotency;
-    // here we lean on a Postgres unique-key insert instead, since this
-    // service is already all-in on JPA/Postgres. Same idea either way:
-    // let the database's own uniqueness guarantee decide who "wins",
-    // instead of a check-then-act that two threads could both pass.
     private boolean claimAssessment(String assessmentId) {
         try {
             processedAssessmentRepository.save(new ProcessedAssessment(assessmentId, Instant.now()));
@@ -150,10 +123,6 @@ public class IncidentService {
         return incident;
     }
 
-    // Deliberately does NOT auto-reopen a CONTAINED incident just because
-    // fresh traffic came in — it updates the numbers and leaves a note,
-    // but the status change itself is left to a human analyst. Otherwise
-    // the system would be fighting an analyst's own status decisions.
     private Incident updateFromAssessment(Incident incident, ThreatAssessmentEvent event) {
         boolean escalated = event.score() > incident.getScore();
 
@@ -178,8 +147,6 @@ public class IncidentService {
         return incident;
     }
 
-    // ---------- Analyst-facing operations ----------
-
     public List<Incident> findAll() {
         return incidentRepository.findAllByOrderByCreatedAtDesc();
     }
@@ -190,7 +157,7 @@ public class IncidentService {
     }
 
     public List<IncidentActivity> findActivity(Long incidentId) {
-        findById(incidentId); // 404s here if the incident doesn't exist
+        findById(incidentId);
         return activityRepository.findAllByIncidentIdOrderByCreatedAtAsc(incidentId);
     }
 
@@ -236,11 +203,6 @@ public class IncidentService {
         return incident;
     }
 
-    // Admin-only (see SecurityConfig). Deletes the same Redis key
-    // BlocklistService writes and HoneypotController checks — this is a
-    // manual override on top of the 5-minute auto-expiry, not a
-    // replacement for it. If the incident wasn't actually blocked, this
-    // is a harmless no-op: Redis DEL on a missing key just does nothing.
     @Transactional
     public Incident unblock(Long id, Long expectedVersion, String actor) {
         Incident incident = findById(id);
@@ -257,13 +219,6 @@ public class IncidentService {
         return incident;
     }
 
-    // Admin-only, same as unblock. The only real difference from the
-    // automatic block BlocklistService sets: no Duration argument means
-    // Redis stores this key with no TTL at all — it never expires on its
-    // own, only unblock() above (or a manual Redis DEL) removes it.
-    // Works whether the incident is currently auto-blocked or not, since
-    // an admin might want to ban an IP the scoring never flagged as
-    // CRITICAL on its own.
     @Transactional
     public Incident permaBlock(Long id, Long expectedVersion, String actor) {
         Incident incident = findById(id);
@@ -272,7 +227,7 @@ public class IncidentService {
         redisTemplate.opsForValue().set(BLOCK_KEY_PREFIX + incident.getSourceIp(), "true");
 
         incident.setBlocked(true);
-        incident.setBlockExpiresAt(null); // null = no expiry, not "already expired"
+        incident.setBlockExpiresAt(null);
         incident.setUpdatedAt(Instant.now());
         incident = flushOrConflict(incident);
 
@@ -281,12 +236,6 @@ public class IncidentService {
         return incident;
     }
 
-    // This check catches the vast majority of real conflicts (the
-    // request already carries a version that's out of date the moment it
-    // arrives). It is intentionally paired with flushOrConflict() below,
-    // which catches the rarer remaining race: two requests both pass this
-    // check within the same instant, and only one can actually win the
-    // database write.
     private void checkVersion(Incident incident, Long expectedVersion) {
         if (!incident.getVersion().equals(expectedVersion)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
@@ -296,12 +245,6 @@ public class IncidentService {
         }
     }
 
-    // saveAndFlush (not plain save) is the important detail here: it
-    // forces Hibernate to actually run the UPDATE right now, on this
-    // line, instead of deferring it to the end of the transaction. That
-    // makes a real @Version conflict throw synchronously, right where we
-    // can catch it — a plain save() could let the exception surface much
-    // later, outside this try/catch entirely.
     private Incident flushOrConflict(Incident incident) {
         try {
             return incidentRepository.saveAndFlush(incident);

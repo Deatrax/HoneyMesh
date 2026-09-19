@@ -5,11 +5,6 @@ import org.springframework.web.socket.config.annotation.EnableWebSocket;
 import org.springframework.web.socket.config.annotation.WebSocketConfigurer;
 import org.springframework.web.socket.config.annotation.WebSocketHandlerRegistry;
 
-/**
- * Plain (non-STOMP) WebSocket for now — enough to prove the handshake survives
- * the trip through Spring Cloud Gateway's ws:// route. Redis Pub/Sub fan-out
- * across replicas is a deliberate Day 2 addition — see README.
- */
 @Configuration
 @EnableWebSocket
 public class WebSocketConfig implements WebSocketConfigurer {
@@ -23,6 +18,6 @@ public class WebSocketConfig implements WebSocketConfigurer {
     @Override
     public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
         registry.addHandler(alertWebSocketHandler, "/ws/alerts")
-                .setAllowedOrigins("*"); // tighten before submission
+                .setAllowedOrigins("*");
     }
 }

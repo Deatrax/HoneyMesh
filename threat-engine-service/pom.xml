@@ -58,10 +58,6 @@
             <scope>test</scope>
         </dependency>
 
-        <!-- Validates JWTs issued by incident-service's AuthController, so
-             /api/threat/** can require a token instead of being wide open.
-             Same jjwt version incident-service pins; this service never
-             ISSUES tokens (no login here), only verifies them. -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-security</artifactId>

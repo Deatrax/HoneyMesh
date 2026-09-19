@@ -58,7 +58,6 @@ public class TelemetryListener {
             return;
         }
 
-        // Phase 8 code for Idempotency claim
         if (!idempotencyService.tryClaim(event)) {
             log.info("Skipping duplicate telemetry event for decoy={} sourceIp={} occurredAt={}",
                     event.decoyId(), event.sourceIp(), event.occurredAt());
@@ -104,14 +103,12 @@ public class TelemetryListener {
                     Instant.now());
             this.lastAssessmentEvent = assessmentEvent;
 
-            // Store in Redis bounded recent-history list (for dashboard)
             threatAssessmentHistoryService.saveRecentAssessment(assessmentEvent);
 
             threatAssessmentPublisher.publish(assessmentEvent);
 
             idempotencyService.markCompleted(event);
         } catch (Exception e) {
-            // Release claim on failure
             idempotencyService.releaseClaim(event);
             throw e;
         }

@@ -11,12 +11,6 @@ import org.springframework.stereotype.Service;
 import java.time.Duration;
 import java.util.Optional;
 
-// Stores the most recent request forensics per source IP in Redis — one
-// key, overwritten on every hit, not a growing history. That's enough to
-// answer "what did this attacker's request actually look like" when an
-// analyst is looking at an incident right now, without needing to thread
-// a third field through both event contracts into threat-engine-service
-// and incident-service.
 @Service
 public class RequestForensicsService {
 
@@ -38,7 +32,6 @@ public class RequestForensicsService {
             String json = objectMapper.writeValueAsString(forensics);
             redisTemplate.opsForValue().set(KEY_PREFIX + forensics.sourceIp(), json, TTL);
         } catch (JsonProcessingException e) {
-            // Never let forensics capture fail the actual hit-recording path.
             log.warn("Failed to serialize RequestForensics for {}", forensics.sourceIp(), e);
         }
     }

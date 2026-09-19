@@ -1,18 +1,4 @@
 #!/usr/bin/env bash
-# HoneyMesh integration verification script.
-# Run from the repo root, with the stack already up:
-#   docker compose up -d
-#   bash scripts/verify.sh
-#
-# Note on section 8: it deliberately triggers a real CRITICAL threat
-# escalation and a real IP block as part of verifying enforcement works.
-# If you re-run this within ~5 minutes of a previous run, you may see
-# your test IP already blocked from the start — that's not a failure,
-# it's proof the block persisted across the run. The checks are written
-# to treat "already blocked" as a pass, not just "became blocked."
-#
-# Requires: docker, curl. Mac/Linux, or WSL/Git Bash on Windows.
-# PowerShell equivalent: scripts/verify.ps1
 
 set -uo pipefail
 
@@ -21,7 +7,7 @@ FAIL=0
 
 check() {
   local desc="$1"
-  local result="$2" # 0 = pass, anything else = fail
+  local result="$2"
   if [ "$result" -eq 0 ]; then
     echo "  [PASS] $desc"
     PASS=$((PASS + 1))
@@ -32,10 +18,6 @@ check() {
 }
 
 echo "== 1. Direct service health (Actuator) =="
-# Note: "gateway:8080" here is no longer a direct connection — that port
-# is now owned by load-balancer, which round-robins to gateway-1/gateway-2
-# (see docker-compose.yml). A pass here actually verifies the whole
-# load-balancer -> gateway chain, not just one container.
 for svc_port in decoy-service:8081 threat-engine-service:8082 incident-service:8083 gateway:8080; do
   name="${svc_port%%:*}"
   port="${svc_port##*:}"
@@ -53,10 +35,6 @@ done
 echo
 echo "== 3. Decoy admin CRUD + honeypot catch-all + basic event pipeline =="
 
-# /api/decoy/admin (and all of /api/threat/**) now require a token —
-# decoy-service and threat-engine-service each got their own
-# SecurityConfig.java, mirroring incident-service's. Log in once here and
-# reuse the token for the rest of this section.
 DECOY_ADMIN_LOGIN=$(curl -sf -X POST "http://localhost:8080/api/auth/login" \
   -H "Content-Type: application/json" \
   -d '{"username":"admin","password":"admin123"}')
@@ -78,7 +56,7 @@ check "decoy id parsed from response (id=$DECOY_ID)" $?
 curl -sf "http://localhost:8080${DECOY_PATH}" > /dev/null
 check "hit the decoy's live path through the gateway catch-all route (still public — see decoy-service's SecurityConfig)" $?
 
-sleep 2 # give the async consumer a moment to process
+sleep 2
 
 LAST_EVENT=$(curl -sf -H "Authorization: Bearer ${DECOY_ADMIN_TOKEN}" "http://localhost:8080/api/threat/last-event")
 echo "$LAST_EVENT" | grep -q "\"decoyId\":\"${DECOY_ID}\""
@@ -169,14 +147,12 @@ CHAIN_DECOY_ID=$(echo "$CHAIN_DECOY" | grep -o '"id":[0-9]*' | grep -o '[0-9]*')
 [ -n "$CHAIN_DECOY_ID" ]
 check "created a CRITICAL-risk decoy for the escalation test (id=$CHAIN_DECOY_ID)" $?
 
-# 6 hits: CRITICAL base (60) + 5-or-more-hits bonus (20) = 80, over the
-# CRITICAL threshold (75). One hit of margin above the minimum 5.
 for i in 1 2 3 4 5 6; do
   curl -s "http://localhost:8080${CHAIN_PATH}" > /dev/null
 done
 check "fired 6 rapid hits at the CRITICAL decoy" 0
 
-sleep 3 # let the async chain (correlate -> score -> maybe block -> publish) finish
+sleep 3
 
 ASSESSMENT=$(curl -sf -H "Authorization: Bearer ${ADMIN_TOKEN}" "http://localhost:8080/api/threat/last-assessment-event")
 echo "$ASSESSMENT" | grep -q '"level":"CRITICAL"'

@@ -10,19 +10,6 @@ import org.springframework.stereotype.Component;
 
 import java.util.Map;
 
-/**
- * Turns an Incident into the small JSON envelope the React dashboard
- * listens for on /ws/alerts, then hands it to the existing
- * AlertWebSocketHandler to actually push it over the wire. Kept separate
- * from IncidentService so that class stays focused on business rules,
- * not message formatting — same reasoning as ThreatAssessmentPublisher
- * being its own class in threat-engine-service instead of being inlined
- * into TelemetryListener.
- *
- * Spring Boot auto-configures an ObjectMapper bean for you the moment
- * Jackson is on the classpath (it already is, via spring-boot-starter-web)
- * — we don't have to create or configure one ourselves.
- */
 @Component
 public class IncidentBroadcaster {
 

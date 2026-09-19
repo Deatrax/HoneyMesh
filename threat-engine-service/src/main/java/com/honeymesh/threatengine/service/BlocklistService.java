@@ -45,7 +45,6 @@ public class BlocklistService {
         return Boolean.TRUE.equals(redisTemplate.hasKey(key));
     }
 
-    // Returns -2 if key does not exist, -1 if key exists without TTL.
     public long getRemainingTtlSeconds(String sourceIp) {
         if (sourceIp == null || sourceIp.isBlank()) {
             return 0;

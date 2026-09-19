@@ -1,8 +1,3 @@
-// Dummy target website. Purely cosmetic — no logic, no database, nothing
-// that talks to the rest of HoneyMesh. Its only job is to exist as a
-// plausible "real company site" so the decoy paths (routed separately,
-// see gateway/RouteConfig.java) look like they're hiding inside something
-// real, instead of the demo attacking HoneyMesh's own admin API directly.
 const express = require('express');
 const app = express();
 const PORT = process.env.PORT || 3001;

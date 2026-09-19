@@ -42,8 +42,6 @@ public class DecoyAdminController {
         return DecoyResponse.from(decoyService.findById(id));
     }
 
-    // Two path segments after /admin/ (hit-detail/{ip}) — never collides
-    // with GET /{id} above, which only ever matches one segment.
     @GetMapping("/hit-detail/{sourceIp}")
     public ResponseEntity<RequestForensics> hitDetail(@PathVariable String sourceIp) {
         return forensicsService.findBySourceIp(sourceIp)

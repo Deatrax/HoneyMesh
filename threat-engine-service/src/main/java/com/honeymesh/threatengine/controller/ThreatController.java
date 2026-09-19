@@ -56,10 +56,6 @@ public class ThreatController {
         return value == null ? "0" : value;
     }
 
-    /**
-     * 1. GET /api/threat/last-assessment
-     * Returns the most recent threat assessment from Redis history.
-     */
     @GetMapping("/last-assessment")
     public ResponseEntity<ThreatAssessmentEvent> lastAssessment() {
         ThreatAssessmentEvent latest = historyService.getLatestAssessment();
@@ -69,27 +65,16 @@ public class ThreatController {
         return ResponseEntity.ok(latest);
     }
 
-    /**
-     * Backward-compatible endpoint for Phase 4/5 event lookup.
-     */
     @GetMapping("/last-assessment-event")
     public ResponseEntity<ThreatAssessmentEvent> lastAssessmentEvent() {
         return lastAssessment();
     }
 
-    /**
-     * 2. GET /api/threat/recent-assessments
-     * Returns a bounded list of recent threat assessments (newest first, max 50).
-     */
     @GetMapping("/recent-assessments")
     public List<ThreatAssessmentEvent> recentAssessments() {
         return historyService.getRecentAssessments();
     }
 
-    /**
-     * 3. GET /api/threat/source/{sourceIp}
-     * Returns the current correlation snapshot and block status for a source IP.
-     */
     @GetMapping("/source/{sourceIp}")
     public SourceCorrelationResponse sourceCorrelation(@PathVariable String sourceIp) {
         CorrelationSnapshot snapshot = correlationService.getCorrelationSnapshot(sourceIp);
@@ -103,10 +88,6 @@ public class ThreatController {
         );
     }
 
-    /**
-     * 4. GET /api/threat/block/{sourceIp}
-     * Returns the temporary block status and remaining Redis TTL in seconds.
-     */
     @GetMapping("/block/{sourceIp}")
     public BlockStatusResponse blockStatus(@PathVariable String sourceIp) {
         boolean blocked = blocklistService.isBlocked(sourceIp);
@@ -114,9 +95,6 @@ public class ThreatController {
         return new BlockStatusResponse(sourceIp, blocked, ttlSeconds);
     }
 
-    /**
-     * Backward-compatible endpoint alias for Phase 3 blocklist status query.
-     */
     @GetMapping("/blocklist/{sourceIp}")
     public BlockStatusResponse blocklistStatus(@PathVariable String sourceIp) {
         return blockStatus(sourceIp);

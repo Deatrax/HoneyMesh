@@ -5,11 +5,6 @@ import org.springframework.stereotype.Component;
 
 import java.time.Instant;
 
-/**
- * Temporary proof-of-life: pushes a heartbeat every 10s so you can confirm a
- * WebSocket client connected through the gateway actually receives messages.
- * Delete once real incident-created / status-changed events replace it.
- */
 @Component
 public class TestAlertBroadcaster {
 

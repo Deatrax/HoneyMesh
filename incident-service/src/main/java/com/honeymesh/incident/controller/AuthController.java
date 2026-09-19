@@ -38,9 +38,6 @@ public class AuthController {
         try {
             user = userDetailsService.loadUserByUsername(request.username());
         } catch (UsernameNotFoundException notFound) {
-            // Same message for "no such user" and "wrong password" below
-            // — never tell a caller which one it was, that's a free hint
-            // for anyone guessing usernames.
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid username or password");
         }
 
@@ -48,10 +45,6 @@ public class AuthController {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid username or password");
         }
 
-        // user.getAuthorities() holds Spring Security's internal
-        // "ROLE_ADMIN" form; strip the prefix before putting roles in the
-        // token and the response, since JwtAuthFilter adds it back when
-        // it reads the token later.
         List<String> roles = user.getAuthorities().stream()
                 .map(GrantedAuthority::getAuthority)
                 .map(authority -> authority.replaceFirst("^ROLE_", ""))

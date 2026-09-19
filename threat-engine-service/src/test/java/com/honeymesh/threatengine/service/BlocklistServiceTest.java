@@ -88,13 +88,10 @@ class BlocklistServiceTest {
         String sourceIp = "198.51.100.42";
         String expectedKey = "honeymesh:block:198.51.100.42";
 
-        // First CRITICAL hit
         blocklistService.block(sourceIp);
 
-        // Second CRITICAL hit
         blocklistService.block(sourceIp);
 
-        // Verify set was called twice with 300 seconds TTL
         verify(valueOperations, times(2)).set(eq(expectedKey), eq("true"), eq(Duration.ofSeconds(300)));
     }
 }

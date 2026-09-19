@@ -19,14 +19,10 @@
 
     <properties>
         <java.version>17</java.version>
-        <!-- Spring Cloud 2025.0.x (Northfields) is the release train built against Spring Boot 3.5.x -->
         <spring-cloud.version>2025.0.0</spring-cloud.version>
     </properties>
 
     <dependencies>
-        <!-- As of Spring Cloud 2025.0.0 the artifact was renamed to make the web-stack
-             explicit (webflux vs webmvc). If this exact id 404s for you, fall back to
-             the older name: spring-cloud-starter-gateway -->
         <dependency>
             <groupId>org.springframework.cloud</groupId>
             <artifactId>spring-cloud-starter-gateway-server-webflux</artifactId>

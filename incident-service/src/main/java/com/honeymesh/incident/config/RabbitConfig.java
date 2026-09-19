@@ -10,15 +10,6 @@ import org.springframework.amqp.support.converter.MessageConverter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-/**
- * Same exchange/queue/routing-key names Prince declared in Threat Engine's
- * RabbitConfig.java. RabbitMQ allows two services to declare the same
- * exchange/queue as long as the definitions match exactly (same name,
- * same durability) — it's not an error, it's just idempotent setup. This
- * is why Incident Service doesn't need Threat Engine to be "first" at
- * startup; whichever service starts first creates it, the other just
- * confirms it already matches.
- */
 @Configuration
 public class RabbitConfig {
 
@@ -41,15 +32,6 @@ public class RabbitConfig {
         return BindingBuilder.bind(threatAssessmentQueue).to(honeymeshExchange).with(ASSESSMENT_ROUTING_KEY);
     }
 
-    /**
-     * Same INFERRED fix Prince used in Threat Engine's RabbitConfig, for
-     * the same reason: without it, this converter trusts the producer's
-     * __TypeId__ header, which names Threat Engine's own class
-     * (com.honeymesh.threatengine.event.ThreatAssessmentEvent) — a class
-     * that doesn't exist on THIS service's classpath. INFERRED tells it
-     * instead to deserialize into whatever type our own
-     * @RabbitListener method declares as its parameter.
-     */
     @Bean
     public MessageConverter jsonMessageConverter() {
         Jackson2JsonMessageConverter converter = new Jackson2JsonMessageConverter();

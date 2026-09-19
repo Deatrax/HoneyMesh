@@ -51,13 +51,11 @@ public class CorrelationService {
         long windowStartMs = eventTimeMs - WINDOW_DURATION_MS;
         redisTemplate.opsForZSet().removeRangeByScore(redisKey, 0, (double) (windowStartMs - 1));
 
-        // Active members within 5 min window
         Set<String> remainingMembers = redisTemplate.opsForZSet().rangeByScore(redisKey, (double) windowStartMs,
                 Double.MAX_VALUE);
 
         CorrelationSnapshot snapshot = computeSnapshotFromMembers(remainingMembers);
 
-        // Refresh TTL
         redisTemplate.expire(redisKey, KEY_TTL);
 
         log.debug("Correlated source IP {}: recentHits={}, distinctDecoys={}, highestRisk={}",
@@ -74,7 +72,6 @@ public class CorrelationService {
         long nowMs = System.currentTimeMillis();
         long windowStartMs = nowMs - WINDOW_DURATION_MS;
 
-        // prune old/stale entries
         redisTemplate.opsForZSet().removeRangeByScore(redisKey, 0, (double) (windowStartMs - 1));
 
         Set<String> remainingMembers = redisTemplate.opsForZSet().rangeByScore(redisKey, (double) windowStartMs,

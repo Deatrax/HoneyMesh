@@ -1,13 +1,4 @@
 #!/usr/bin/env bash
-# HoneyMesh live demo — red team walkthrough.
-# Run this LIVE during the presentation. Each phase pauses for Enter so
-# you control the pacing while narrating.
-#
-# Prerequisites:
-#   - docker compose up, everything healthy
-#   - scripts/seed-decoys.sh already run (need real decoys in place)
-#   - nmap installed: brew install nmap
-#   - dashboard (npm run dev) open on screen so the incident shows up live
 
 GATEWAY="http://localhost:8080"
 

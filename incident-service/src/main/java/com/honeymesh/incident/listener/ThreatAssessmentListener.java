@@ -19,10 +19,6 @@ public class ThreatAssessmentListener {
         this.incidentService = incidentService;
     }
 
-    // RabbitConfig.ASSESSMENT_QUEUE is a "public static final String" —
-    // a compile-time constant — so it's legal to reference it directly
-    // inside an annotation like this, instead of retyping the literal
-    // string and risking a typo.
     @RabbitListener(queues = RabbitConfig.ASSESSMENT_QUEUE)
     public void onThreatAssessment(ThreatAssessmentEvent event) {
         if (event == null) {
@@ -31,9 +27,6 @@ public class ThreatAssessmentListener {
         log.info("Received ThreatAssessmentEvent id={} sourceIp={} level={} score={}",
                 event.assessmentId(), event.sourceIp(), event.level(), event.score());
 
-        // All the actual decision-making (dedupe, threshold, create vs.
-        // merge) lives in IncidentService — this class's only job is
-        // "message arrived, hand it off".
         incidentService.handleAssessment(event);
     }
 }

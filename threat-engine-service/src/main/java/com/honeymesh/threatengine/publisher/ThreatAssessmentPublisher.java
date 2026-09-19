@@ -18,10 +18,6 @@ public class ThreatAssessmentPublisher {
         this.rabbitTemplate = rabbitTemplate;
     }
 
-    /**
-     * Publishes a ThreatAssessmentEvent integration message to RabbitMQ exchange "honeymesh.events"
-     * with routing key "threat.assessment.created".
-     */
     public void publish(ThreatAssessmentEvent event) {
         if (event == null) {
             log.warn("Cannot publish null ThreatAssessmentEvent");

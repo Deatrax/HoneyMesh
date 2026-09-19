@@ -13,11 +13,6 @@ function loadStoredAuth() {
   }
 }
 
-// Wraps login state (token/username/roles) so any page can ask "am I
-// logged in, and as who" without re-fetching. Persists to localStorage
-// so a page refresh doesn't log the analyst out mid-shift — this is a
-// real app running in a real browser tab, not an embedded preview, so
-// localStorage is the right tool here.
 export function AuthProvider({ children }) {
   const [auth, setAuth] = useState(loadStoredAuth)
 
@@ -41,8 +36,6 @@ export function AuthProvider({ children }) {
     localStorage.removeItem(STORAGE_KEY)
   }, [])
 
-  // Wraps fetch() and attaches the Bearer token automatically, so pages
-  // never have to remember to add the Authorization header themselves.
   const authFetch = useCallback((url, options = {}) => {
     const headers = { ...(options.headers || {}) }
     if (auth?.token) {

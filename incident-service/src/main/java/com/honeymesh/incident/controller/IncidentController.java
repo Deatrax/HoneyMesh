@@ -31,9 +31,6 @@ public class IncidentController {
         this.incidentService = incidentService;
     }
 
-    // Kept public/unauthenticated on purpose — scripts/verify.sh checks
-    // "gateway routes /api/incidents/ping" without sending a token, the
-    // same way it does for the other three services. See SecurityConfig.
     @GetMapping("/ping")
     public String ping() {
         return "incident-service is up";
@@ -54,12 +51,6 @@ public class IncidentController {
         return incidentService.findActivity(id).stream().map(IncidentActivityResponse::from).toList();
     }
 
-    // Authentication is a method parameter here, not something we read
-    // ourselves — Spring MVC resolves it automatically from whatever
-    // JwtAuthFilter put into the SecurityContext for this request. Using
-    // authentication.getName() (not a field in the request body) means a
-    // caller can't spoof who's adding the note; it's always the identity
-    // proven by their token.
     @PostMapping("/{id}/notes")
     public IncidentResponse addNote(@PathVariable Long id, @Valid @RequestBody NoteRequest request,
                                      Authentication authentication) {
@@ -74,8 +65,6 @@ public class IncidentController {
         return IncidentResponse.from(incident);
     }
 
-    // Restricted to ROLE_ADMIN — see SecurityConfig's
-    // .requestMatchers(HttpMethod.PATCH, "/api/incidents/*/assign").hasRole("ADMIN").
     @PatchMapping("/{id}/assign")
     public IncidentResponse assign(@PathVariable Long id, @Valid @RequestBody AssignRequest request,
                                     Authentication authentication) {
@@ -83,9 +72,6 @@ public class IncidentController {
         return IncidentResponse.from(incident);
     }
 
-    // Also admin-only — see SecurityConfig's matching rule for this path.
-    // A manual override on top of the 5-minute auto-expiry, not a
-    // replacement for it.
     @PatchMapping("/{id}/unblock")
     public IncidentResponse unblock(@PathVariable Long id, @Valid @RequestBody UnblockRequest request,
                                      Authentication authentication) {
@@ -93,8 +79,6 @@ public class IncidentController {
         return IncidentResponse.from(incident);
     }
 
-    // Admin-only, same as unblock. See IncidentService.permaBlock() for
-    // the actual "no TTL" mechanics.
     @PatchMapping("/{id}/perma-block")
     public IncidentResponse permaBlock(@PathVariable Long id, @Valid @RequestBody PermaBlockRequest request,
                                         Authentication authentication) {

@@ -15,18 +15,6 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 import java.util.List;
 
-/**
- * Same pattern as incident-service's JwtAuthFilter and decoy-service's
- * copy of it. Runs once per request, before the rest of Spring
- * Security's checks: reads "Authorization: Bearer &lt;token&gt;", and if
- * it's a valid JWT, tells Spring Security this request is authenticated
- * as that user with those roles.
- *
- * If there's no token, or it's invalid/expired, this filter does nothing
- * and lets the request continue unauthenticated — SecurityConfig's
- * authorizeHttpRequests() rules, further down the chain, decide what
- * happens to an unauthenticated request to a given path.
- */
 public class JwtAuthFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
@@ -57,8 +45,6 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 var authentication = new UsernamePasswordAuthenticationToken(username, null, authorities);
                 SecurityContextHolder.getContext().setAuthentication(authentication);
             } catch (JwtException | IllegalArgumentException invalidToken) {
-                // Bad/expired/tampered token: clear anything that might
-                // already be set and leave the request unauthenticated.
                 SecurityContextHolder.clearContext();
             }
         }

@@ -92,7 +92,6 @@ class TelemetryIdempotencyServicePhase8Test {
         TelemetryEvent event = new TelemetryEvent("decoy-1", "10.0.0.1", "/api/v1/auth", RiskLevel.HIGH, now);
         String key = idempotencyService.getKey(idempotencyService.generateFingerprint(event));
 
-        // First call claims successfully
         when(valueOperations.setIfAbsent(eq(key), eq("PROCESSING"), any(Duration.class)))
                 .thenReturn(true)
                 .thenReturn(false);
@@ -102,14 +101,12 @@ class TelemetryIdempotencyServicePhase8Test {
         when(correlationService.correlate(event)).thenReturn(snapshot);
         when(threatScoringService.assess(snapshot)).thenReturn(assessment);
 
-        // Process first time -> succeeds
         telemetryListener.onTelemetryEvent(event);
         verify(threatAssessmentPublisher, times(1)).publish(any());
         verify(valueOperations).set(eq(key), eq("DONE"), eq(TelemetryIdempotencyService.COMPLETED_TTL));
 
-        // Process exact duplicate -> skipped
         telemetryListener.onTelemetryEvent(event);
-        verify(threatAssessmentPublisher, times(1)).publish(any()); // count remains 1
+        verify(threatAssessmentPublisher, times(1)).publish(any());
     }
 
     @Test

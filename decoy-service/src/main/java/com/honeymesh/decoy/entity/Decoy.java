@@ -32,8 +32,6 @@ public class Decoy {
     @Column(nullable = false)
     private String name;
 
-    // The path an attacker actually hits, e.g. "/api/admin/db-backup".
-    // Unique because the honeypot lookup is a direct path -> Decoy match.
     @Column(name = "endpoint_path", nullable = false, unique = true)
     private String endpointPath;
 

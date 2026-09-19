@@ -15,8 +15,6 @@ const STATUS_STYLES = {
   RESOLVED: { color: '#0f6e56', bg: '#e6f4ea', border: '#a8dab5' },
 }
 
-// Mirrors ALLOWED_TRANSITIONS in IncidentService.java — keep these two in
-// sync if the state machine ever changes.
 const NEXT_STATUSES = {
   OPEN: ['INVESTIGATING'],
   INVESTIGATING: ['CONTAINED', 'RESOLVED'],
@@ -69,10 +67,6 @@ export default function IncidentsPage() {
     }
   }, [authFetch])
 
-  // Forensics lives on decoy-service, not incident-service — a separate
-  // fetch by sourceIp rather than a field on the incident itself. Missing
-  // (404) is expected once 30 minutes pass since the last hit; treat that
-  // as "nothing to show," not an error.
   const fetchForensics = useCallback(async (sourceIp) => {
     try {
       const res = await authFetch(`/api/decoy/admin/hit-detail/${sourceIp}`)
@@ -86,8 +80,6 @@ export default function IncidentsPage() {
     }
   }, [authFetch])
 
-  // Initial load + 5s poll — same pattern ThreatsPage.jsx uses, so the
-  // dashboard keeps working even if the WebSocket connection below drops.
   useEffect(() => {
     fetchIncidents(true)
     const intervalId = setInterval(() => fetchIncidents(false), 5000)
@@ -105,11 +97,6 @@ export default function IncidentsPage() {
     if (incident) fetchForensics(incident.sourceIp)
   }, [selectedId, fetchActivity, fetchForensics, incidents])
 
-  // Live updates: IncidentBroadcaster.java pushes
-  // {"type":"incident.updated", "incident": {...}} over /ws/alerts every
-  // time IncidentService creates or changes an incident. We don't bother
-  // merging that payload into state by hand — just re-fetch, which is
-  // simple and always ends up exactly consistent with the database.
   useEffect(() => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     const socket = new WebSocket(`${protocol}//${window.location.host}/ws/alerts`)
@@ -127,7 +114,6 @@ export default function IncidentsPage() {
           }
         }
       } catch {
-        // heartbeat or non-JSON message — ignore
       }
     }
 
@@ -149,9 +135,6 @@ export default function IncidentsPage() {
 
   async function readError(res) {
     const body = await res.json().catch(() => null)
-    // With spring.mvc.problemdetails.enabled=true, ResponseStatusException
-    // messages arrive in body.detail — e.g. "Cannot move an incident from
-    // OPEN to RESOLVED" or a 409 optimistic-lock conflict message.
     return body?.detail || body?.message || `HTTP ${res.status}`
   }
 
