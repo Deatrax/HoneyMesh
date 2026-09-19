@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import DecoyForm from '../components/DecoyForm.jsx'
+import { useAuth } from '../auth/AuthContext.jsx'
 
 const RISK_COLORS = {
   LOW: '#0f6e56',
@@ -9,13 +10,19 @@ const RISK_COLORS = {
 }
 
 export default function DecoysPage() {
+  const { authFetch } = useAuth()
   const [decoys, setDecoys] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
+  // decoy-service's /api/decoy/admin/** now requires a token (see
+  // decoy-service's new SecurityConfig.java) — authFetch attaches the
+  // logged-in analyst's Bearer token the same way IncidentsPage.jsx
+  // already does. The honeypot paths themselves (what HoneypotController
+  // handles) stay public; only this admin management surface changed.
   const fetchDecoys = useCallback(() => {
     setLoading(true)
-    fetch('/api/decoy/admin')
+    authFetch('/api/decoy/admin')
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
         return res.json()
@@ -26,7 +33,7 @@ export default function DecoysPage() {
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false))
-  }, [])
+  }, [authFetch])
 
   useEffect(() => {
     fetchDecoys()
@@ -34,13 +41,13 @@ export default function DecoysPage() {
 
   async function toggleEnabled(decoy) {
     const action = decoy.enabled ? 'disable' : 'enable'
-    const res = await fetch(`/api/decoy/admin/${decoy.id}/${action}`, { method: 'PATCH' })
+    const res = await authFetch(`/api/decoy/admin/${decoy.id}/${action}`, { method: 'PATCH' })
     if (res.ok) fetchDecoys()
   }
 
   async function deleteDecoy(decoy) {
     if (!window.confirm(`Delete decoy "${decoy.name}"?`)) return
-    const res = await fetch(`/api/decoy/admin/${decoy.id}`, { method: 'DELETE' })
+    const res = await authFetch(`/api/decoy/admin/${decoy.id}`, { method: 'DELETE' })
     if (res.ok) fetchDecoys()
   }
 

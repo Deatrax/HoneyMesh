@@ -1,8 +1,10 @@
 import { useState } from 'react'
+import { useAuth } from '../auth/AuthContext.jsx'
 
 const RISK_LEVELS = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']
 
 export default function DecoyForm({ onCreated }) {
+  const { authFetch } = useAuth()
   const [name, setName] = useState('')
   const [endpointPath, setEndpointPath] = useState('')
   const [riskLevel, setRiskLevel] = useState('LOW')
@@ -16,7 +18,7 @@ export default function DecoyForm({ onCreated }) {
     setError(null)
 
     try {
-      const res = await fetch('/api/decoy/admin', {
+      const res = await authFetch('/api/decoy/admin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

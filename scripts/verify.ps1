@@ -39,6 +39,8 @@ function Get-StatusCode($uri, $method = "GET", $headers = @{}, $body = $null) {
 }
 
 Write-Host "== 1. Direct service health (Actuator) =="
+# Note: "gateway:8080" is no longer a direct connection — that port is
+# now owned by load-balancer, which round-robins to gateway-1/gateway-2.
 $services = @("decoy-service:8081", "threat-engine-service:8082", "incident-service:8083", "gateway:8080")
 foreach ($svc in $services) {
     $parts = $svc.Split(":")
@@ -63,23 +65,32 @@ foreach ($p in @("decoy", "threat", "incidents")) {
 Write-Host "`n== 3. Decoy admin CRUD + honeypot catch-all + basic event pipeline =="
 $decoyPath = "/api/admin/verify-$(Get-Date -UFormat %s)"
 try {
-    $create = Invoke-RestMethod -Uri "http://localhost:8080/api/decoy/admin" -Method POST -ContentType "application/json" `
+    # /api/decoy/admin (and all of /api/threat/**) now require a token —
+    # decoy-service and threat-engine-service each got their own
+    # SecurityConfig.java, mirroring incident-service's.
+    $decoyAdminLogin = Invoke-RestMethod -Uri "http://localhost:8080/api/auth/login" -Method POST -ContentType "application/json" `
+        -Body (@{ username = "admin"; password = "admin123" } | ConvertTo-Json)
+    $decoyAdminToken = $decoyAdminLogin.token
+    Check "admin login succeeds (needed for decoy-admin/threat APIs, now token-protected)" ($null -ne $decoyAdminToken)
+    $decoyAuthHeader = @{ Authorization = "Bearer $decoyAdminToken" }
+
+    $create = Invoke-RestMethod -Uri "http://localhost:8080/api/decoy/admin" -Method POST -ContentType "application/json" -Headers $decoyAuthHeader `
         -Body (@{ name = "verify script decoy"; endpointPath = $decoyPath; riskLevel = "LOW" } | ConvertTo-Json)
     Check "created a decoy via admin API" $true
     $decoyId = $create.id
     Check "decoy id parsed from response (id=$decoyId)" ($null -ne $decoyId)
 
     Invoke-RestMethod -Uri "http://localhost:8080$decoyPath" -TimeoutSec 5 | Out-Null
-    Check "hit the decoy's live path through the gateway catch-all route" $true
+    Check "hit the decoy's live path through the gateway catch-all route (still public — see decoy-service's SecurityConfig)" $true
 
     Start-Sleep -Seconds 2
-    $lastEvent = Invoke-RestMethod -Uri "http://localhost:8080/api/threat/last-event"
+    $lastEvent = Invoke-RestMethod -Uri "http://localhost:8080/api/threat/last-event" -Headers $decoyAuthHeader
     Check "threat-engine consumed the event for decoy $decoyId" ($lastEvent.decoyId -eq "$decoyId")
 
-    $count = Invoke-RestMethod -Uri "http://localhost:8080/api/threat/count/$decoyId"
+    $count = Invoke-RestMethod -Uri "http://localhost:8080/api/threat/count/$decoyId" -Headers $decoyAuthHeader
     Check "Redis counter incremented for decoy $decoyId (count=$count)" ($count -ne "0")
 
-    Invoke-RestMethod -Uri "http://localhost:8080/api/decoy/admin/$decoyId" -Method DELETE | Out-Null
+    Invoke-RestMethod -Uri "http://localhost:8080/api/decoy/admin/$decoyId" -Method DELETE -Headers $decoyAuthHeader | Out-Null
     Check "cleaned up test decoy" $true
 } catch {
     Check "section 3 failed with error: $_" $false
@@ -134,7 +145,7 @@ try {
     Check "admin login succeeds (needed to read incidents below)" ($null -ne $adminToken)
 
     $chainPath = "/api/admin/verify-chain-$(Get-Date -UFormat %s)"
-    $chainDecoy = Invoke-RestMethod -Uri "http://localhost:8080/api/decoy/admin" -Method POST -ContentType "application/json" `
+    $chainDecoy = Invoke-RestMethod -Uri "http://localhost:8080/api/decoy/admin" -Method POST -ContentType "application/json" -Headers @{ Authorization = "Bearer $adminToken" } `
         -Body (@{ name = "verify chain decoy"; endpointPath = $chainPath; riskLevel = "CRITICAL" } | ConvertTo-Json)
     $chainDecoyId = $chainDecoy.id
     Check "created a CRITICAL-risk decoy for the escalation test (id=$chainDecoyId)" ($null -ne $chainDecoyId)
@@ -148,13 +159,13 @@ try {
 
     Start-Sleep -Seconds 3
 
-    $assessment = Invoke-RestMethod -Uri "http://localhost:8080/api/threat/last-assessment-event"
+    $assessment = Invoke-RestMethod -Uri "http://localhost:8080/api/threat/last-assessment-event" -Headers @{ Authorization = "Bearer $adminToken" }
     Check "threat assessment escalated to CRITICAL (score/level reflect the 6 hits)" ($assessment.level -eq "CRITICAL")
 
     $chainIp = $assessment.sourceIp
     Check "captured the source IP that should now be blocked ($chainIp)" ($null -ne $chainIp)
 
-    $blockStatus = Invoke-RestMethod -Uri "http://localhost:8080/api/threat/blocklist/$chainIp"
+    $blockStatus = Invoke-RestMethod -Uri "http://localhost:8080/api/threat/blocklist/$chainIp" -Headers @{ Authorization = "Bearer $adminToken" }
     Check "threat-engine confirms $chainIp is blocked" ($blockStatus.blocked -eq $true)
 
     $enforcedStatus = Get-StatusCode "http://localhost:8080$chainPath"

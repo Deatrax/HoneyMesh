@@ -2,14 +2,29 @@
 # Seeds a handful of realistic-looking decoys for local dev/demo.
 # Safe to re-run: a duplicate path just gets skipped (decoy-service's own
 # 409 check), nothing special this script needs to handle.
+#
+# /api/decoy/admin now requires an ADMIN token (decoy-service's new
+# SecurityConfig.java) — log in as the demo admin account first and
+# attach the token to every seed request.
 
 GATEWAY="http://localhost:8080"
+
+echo "Logging in as admin..."
+LOGIN_RESPONSE=$(curl -sf -X POST "$GATEWAY/api/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"admin123"}')
+ADMIN_TOKEN=$(echo "$LOGIN_RESPONSE" | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
+
+if [ -z "$ADMIN_TOKEN" ]; then
+  echo "Could not log in as admin — is docker compose up? Aborting."
+  exit 1
+fi
 
 seed() {
   local body="$1"
   local status
   status=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$GATEWAY/api/decoy/admin" \
-    -H "Content-Type: application/json" -d "$body")
+    -H "Content-Type: application/json" -H "Authorization: Bearer $ADMIN_TOKEN" -d "$body")
   if [ "$status" = "201" ]; then
     echo "  created"
   elif [ "$status" = "409" ]; then

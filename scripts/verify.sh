@@ -32,6 +32,10 @@ check() {
 }
 
 echo "== 1. Direct service health (Actuator) =="
+# Note: "gateway:8080" here is no longer a direct connection — that port
+# is now owned by load-balancer, which round-robins to gateway-1/gateway-2
+# (see docker-compose.yml). A pass here actually verifies the whole
+# load-balancer -> gateway chain, not just one container.
 for svc_port in decoy-service:8081 threat-engine-service:8082 incident-service:8083 gateway:8080; do
   name="${svc_port%%:*}"
   port="${svc_port##*:}"
@@ -48,10 +52,22 @@ done
 
 echo
 echo "== 3. Decoy admin CRUD + honeypot catch-all + basic event pipeline =="
+
+# /api/decoy/admin (and all of /api/threat/**) now require a token —
+# decoy-service and threat-engine-service each got their own
+# SecurityConfig.java, mirroring incident-service's. Log in once here and
+# reuse the token for the rest of this section.
+DECOY_ADMIN_LOGIN=$(curl -sf -X POST "http://localhost:8080/api/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"admin123"}')
+DECOY_ADMIN_TOKEN=$(echo "$DECOY_ADMIN_LOGIN" | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
+[ -n "$DECOY_ADMIN_TOKEN" ]
+check "admin login succeeds (needed for decoy-admin/threat APIs, now token-protected)" $?
+
 DECOY_PATH="/api/admin/verify-$(date +%s)"
 
 CREATE_RESPONSE=$(curl -sf -X POST "http://localhost:8080/api/decoy/admin" \
-  -H "Content-Type: application/json" \
+  -H "Content-Type: application/json" -H "Authorization: Bearer ${DECOY_ADMIN_TOKEN}" \
   -d "{\"name\":\"verify script decoy\",\"endpointPath\":\"${DECOY_PATH}\",\"riskLevel\":\"LOW\"}")
 check "created a decoy via admin API" $?
 
@@ -60,19 +76,19 @@ DECOY_ID=$(echo "$CREATE_RESPONSE" | grep -o '"id":[0-9]*' | grep -o '[0-9]*')
 check "decoy id parsed from response (id=$DECOY_ID)" $?
 
 curl -sf "http://localhost:8080${DECOY_PATH}" > /dev/null
-check "hit the decoy's live path through the gateway catch-all route" $?
+check "hit the decoy's live path through the gateway catch-all route (still public — see decoy-service's SecurityConfig)" $?
 
 sleep 2 # give the async consumer a moment to process
 
-LAST_EVENT=$(curl -sf "http://localhost:8080/api/threat/last-event")
+LAST_EVENT=$(curl -sf -H "Authorization: Bearer ${DECOY_ADMIN_TOKEN}" "http://localhost:8080/api/threat/last-event")
 echo "$LAST_EVENT" | grep -q "\"decoyId\":\"${DECOY_ID}\""
 check "threat-engine consumed the event for decoy $DECOY_ID" $?
 
-COUNT=$(curl -sf "http://localhost:8080/api/threat/count/${DECOY_ID}")
+COUNT=$(curl -sf -H "Authorization: Bearer ${DECOY_ADMIN_TOKEN}" "http://localhost:8080/api/threat/count/${DECOY_ID}")
 { [ -n "$COUNT" ] && [ "$COUNT" != "0" ]; }
 check "Redis counter incremented for decoy $DECOY_ID (count=$COUNT)" $?
 
-curl -sf -X DELETE "http://localhost:8080/api/decoy/admin/${DECOY_ID}" > /dev/null
+curl -sf -X DELETE -H "Authorization: Bearer ${DECOY_ADMIN_TOKEN}" "http://localhost:8080/api/decoy/admin/${DECOY_ID}" > /dev/null
 check "cleaned up test decoy" $?
 
 echo
@@ -147,7 +163,7 @@ check "admin login succeeds (needed to read incidents below)" $?
 
 CHAIN_PATH="/api/admin/verify-chain-$(date +%s)"
 CHAIN_DECOY=$(curl -sf -X POST "http://localhost:8080/api/decoy/admin" \
-  -H "Content-Type: application/json" \
+  -H "Content-Type: application/json" -H "Authorization: Bearer ${ADMIN_TOKEN}" \
   -d "{\"name\":\"verify chain decoy\",\"endpointPath\":\"${CHAIN_PATH}\",\"riskLevel\":\"CRITICAL\"}")
 CHAIN_DECOY_ID=$(echo "$CHAIN_DECOY" | grep -o '"id":[0-9]*' | grep -o '[0-9]*')
 [ -n "$CHAIN_DECOY_ID" ]
@@ -162,7 +178,7 @@ check "fired 6 rapid hits at the CRITICAL decoy" 0
 
 sleep 3 # let the async chain (correlate -> score -> maybe block -> publish) finish
 
-ASSESSMENT=$(curl -sf "http://localhost:8080/api/threat/last-assessment-event")
+ASSESSMENT=$(curl -sf -H "Authorization: Bearer ${ADMIN_TOKEN}" "http://localhost:8080/api/threat/last-assessment-event")
 echo "$ASSESSMENT" | grep -q '"level":"CRITICAL"'
 check "threat assessment escalated to CRITICAL (score/level reflect the 6 hits)" $?
 
@@ -170,7 +186,7 @@ CHAIN_IP=$(echo "$ASSESSMENT" | grep -o '"sourceIp":"[^"]*"' | cut -d'"' -f4)
 [ -n "$CHAIN_IP" ]
 check "captured the source IP that should now be blocked ($CHAIN_IP)" $?
 
-BLOCK_STATUS_RESPONSE=$(curl -sf "http://localhost:8080/api/threat/blocklist/${CHAIN_IP}")
+BLOCK_STATUS_RESPONSE=$(curl -sf -H "Authorization: Bearer ${ADMIN_TOKEN}" "http://localhost:8080/api/threat/blocklist/${CHAIN_IP}")
 echo "$BLOCK_STATUS_RESPONSE" | grep -q '"blocked":true'
 check "threat-engine confirms $CHAIN_IP is blocked" $?
 
