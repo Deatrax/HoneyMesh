@@ -23,6 +23,15 @@ spring:
       host: ${SPRING_DATA_REDIS_HOST:localhost}
       port: 6379
 
+# Validates tokens issued by incident-service's /api/auth/login — this
+# service never issues its own, so it only ever needs the secret to check
+# a signature, never an expiration window to mint one. MUST be the exact
+# same value incident-service signs with (see its application.yml) or
+# every token this service tries to validate fails with a
+# SignatureException. Same "swap before real deployment" caveat applies.
+jwt:
+  secret: ${JWT_SECRET:honeymesh-dev-jwt-signing-secret-change-before-any-real-deployment-2026}
+
 management:
   endpoints:
     web:

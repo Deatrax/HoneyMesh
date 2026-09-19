@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useAuth } from '../auth/AuthContext.jsx'
 
 const LEVEL_STYLES = {
   INFORMATIONAL: { color: '#0f6e56', bg: '#e6f4ea', border: '#a8dab5' },
@@ -8,6 +9,7 @@ const LEVEL_STYLES = {
 }
 
 export default function ThreatsPage() {
+  const { authFetch } = useAuth()
   const [assessments, setAssessments] = useState([])
   const [selectedAssessment, setSelectedAssessment] = useState(null)
   const [sourceCorrelation, setSourceCorrelation] = useState(null)
@@ -26,7 +28,7 @@ export default function ThreatsPage() {
     if (isInitial) setLoading(true)
 
     try {
-      const res = await fetch('/api/threat/recent-assessments')
+      const res = await authFetch('/api/threat/recent-assessments')
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = await res.json()
       setAssessments(data)
@@ -37,7 +39,7 @@ export default function ThreatsPage() {
       setLoading(false)
       isFetchingRef.current = false
     }
-  }, [])
+  }, [authFetch])
 
   // Auto-refresh every 5 seconds + cleanup timer on component unmount
   useEffect(() => {
@@ -65,8 +67,8 @@ export default function ThreatsPage() {
     const ip = encodeURIComponent(selectedAssessment.sourceIp)
 
     Promise.allSettled([
-      fetch(`/api/threat/source/${ip}`).then((res) => (res.ok ? res.json() : null)),
-      fetch(`/api/threat/block/${ip}`).then((res) => (res.ok ? res.json() : null)),
+      authFetch(`/api/threat/source/${ip}`).then((res) => (res.ok ? res.json() : null)),
+      authFetch(`/api/threat/block/${ip}`).then((res) => (res.ok ? res.json() : null)),
     ]).then(([srcRes, blockRes]) => {
       if (!isMounted) return
       setDetailLoading(false)
@@ -87,7 +89,7 @@ export default function ThreatsPage() {
     return () => {
       isMounted = false
     }
-  }, [selectedAssessment])
+  }, [selectedAssessment, authFetch])
 
   // Summary card metrics derived strictly from loaded data
   const totalCount = assessments.length

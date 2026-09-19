@@ -1,0 +1,39 @@
+package com.honeymesh.threatengine.security;
+
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.security.Keys;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
+
+import javax.crypto.SecretKey;
+import java.nio.charset.StandardCharsets;
+
+/**
+ * Validate-only counterpart to incident-service's JwtService — same
+ * pattern used in decoy-service's security package. This service never
+ * issues a token, it only checks that one handed to it was signed with
+ * the shared secret and hasn't expired.
+ */
+@Component
+public class JwtService {
+
+    private final SecretKey key;
+
+    public JwtService(@Value("${jwt.secret}") String secret) {
+        this.key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
+    }
+
+    /**
+     * Throws a JwtException subclass (unchecked) if the token is invalid,
+     * expired, or tampered with — JwtAuthFilter is what catches that, not
+     * this method.
+     */
+    public Claims parseAndValidate(String token) {
+        return Jwts.parser()
+                .verifyWith(key)
+                .build()
+                .parseSignedClaims(token)
+                .getPayload();
+    }
+}
